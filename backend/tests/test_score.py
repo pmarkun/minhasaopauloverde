@@ -39,8 +39,8 @@ def test_score_contract() -> None:
     assert 0 <= body["score"]["passed"] <= 3
     assert "canopy_100m" in body["criteria"]["canopy"]
     assert "distance_m" in body["criteria"]["park_access"]
-    assert body["criteria"]["canopy"]["source"] == "sample_local"
-    assert body["criteria"]["park_access"]["source"] == "sample_local_walking_estimate"
+    assert body["criteria"]["canopy"]["source"] in {"sample_local", "openstreetmap_overpass_proxy"}
+    assert body["criteria"]["park_access"]["source"].endswith("_walking_estimate")
 
 
 def test_map_data_contract() -> None:

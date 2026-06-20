@@ -328,6 +328,14 @@ nix develop --command python tools/fetch_osm_green_areas.py
 
 Isso gera `data/processed/green_areas.json`. Quando esse arquivo existe, o backend usa esses dados no criterio 300 e no mapa; caso contrario, usa o dataset local de amostra.
 
+Para baixar arvores individuais e uma camada proxy de cobertura arborea do OSM:
+
+```bash
+nix develop --command python tools/fetch_osm_tree_layers.py
+```
+
+Isso gera `data/processed/tree_points.json` e `data/processed/canopy_patches.json`. A camada de cobertura OSM e apenas um proxy para o MVP; MapBiomas/GeoSampa continuam sendo as fontes alvo para producao.
+
 ## API inicial
 
 Endpoint:

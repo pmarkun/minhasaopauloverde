@@ -21,6 +21,15 @@ def green_areas() -> list[dict[str, Any]]:
     return payload["green_areas"]
 
 
+def green_areas_source() -> str:
+    path = data_root() / "green_areas.json"
+    if not path.exists():
+        return "sample_local"
+    with path.open(encoding="utf-8") as file:
+        payload = json.load(file)
+    return payload.get("source", "processed_local")
+
+
 @lru_cache
 def canopy_patches() -> list[dict[str, Any]]:
     path = data_root() / "canopy_patches.json"
@@ -29,6 +38,15 @@ def canopy_patches() -> list[dict[str, Any]]:
     with path.open(encoding="utf-8") as file:
         payload = json.load(file)
     return payload["canopy_patches"]
+
+
+def canopy_patches_source() -> str:
+    path = data_root() / "canopy_patches.json"
+    if not path.exists():
+        return "sample_local"
+    with path.open(encoding="utf-8") as file:
+        payload = json.load(file)
+    return payload.get("source", "processed_local")
 
 
 @lru_cache
@@ -41,10 +59,18 @@ def tree_points() -> list[dict[str, Any]]:
     return payload["tree_points"]
 
 
+def tree_points_source() -> str:
+    path = data_root() / "tree_points.json"
+    if not path.exists():
+        return "sample_local"
+    with path.open(encoding="utf-8") as file:
+        payload = json.load(file)
+    return payload.get("source", "processed_local")
+
+
 def sample_addresses() -> dict:
     return SAMPLE_ADDRESSES
 
 
 def pilot_territories() -> list[dict]:
     return PILOT_TERRITORIES
-

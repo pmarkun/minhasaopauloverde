@@ -5,7 +5,15 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from treecheck_api.data_repository import canopy_patches, green_areas, pilot_territories, sample_addresses, tree_points
+from treecheck_api.data_repository import (
+    canopy_patches,
+    canopy_patches_source,
+    green_areas,
+    green_areas_source,
+    pilot_territories,
+    sample_addresses,
+    tree_points,
+)
 from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
 
 
@@ -149,10 +157,12 @@ def score(
                 status=status_for_bool(canopy_passed),
                 canopy_100m=canopy_100m,
                 canopy_300m=canopy_300m,
+                source=canopy_patches_source(),
             ),
             park_access=ParkAccessCriterion(
                 status=status_for_bool(park_passed),
                 distance_m=park_distance,
+                source=f"{green_areas_source()}_walking_estimate",
             ),
         ),
         score=ScoreSummary(
