@@ -25,7 +25,7 @@ def main() -> None:
     parser.add_argument("--include-geometry", action="store_true", help="Inclui poligonos no JSON; aumenta muito o arquivo.")
     parser.add_argument(
         "--sqlite-output",
-        default="data/processed/canopy_polygons.sqlite",
+        default="data/processed/treecheck.sqlite",
         help="Arquivo SQLite com poligonos reais e indice RTree.",
     )
     args = parser.parse_args()

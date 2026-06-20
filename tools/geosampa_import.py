@@ -149,20 +149,32 @@ def canopy_patch_from_shape_record(item: dict[str, Any], include_geometry: bool 
     return patch
 
 
+def ensure_metadata_table(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS metadata (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+        """,
+    )
+
+
+def reset_tables(connection: sqlite3.Connection, *table_names: str) -> None:
+    for table_name in table_names:
+        connection.execute(f"DROP TABLE IF EXISTS {table_name}")
+
+
 def write_canopy_sqlite(path: Path, patches: list[dict[str, Any]], source: str = "geosampa_cobertura_vegetal") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        path.unlink()
 
     with sqlite3.connect(path) as connection:
+        reset_tables(connection, "canopy", "canopy_index")
+        ensure_metadata_table(connection)
         connection.executescript(
             """
             PRAGMA journal_mode = OFF;
             PRAGMA synchronous = OFF;
-            CREATE TABLE metadata (
-              key TEXT PRIMARY KEY,
-              value TEXT NOT NULL
-            );
             CREATE TABLE canopy (
               id INTEGER PRIMARY KEY,
               source_id TEXT,
@@ -184,7 +196,10 @@ def write_canopy_sqlite(path: Path, patches: list[dict[str, Any]], source: str =
             );
             """,
         )
-        connection.execute("INSERT INTO metadata (key, value) VALUES (?, ?)", ("source", source))
+        connection.execute(
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+            ("canopy_source", source),
+        )
         rows = []
         index_rows = []
         for row_id, patch in enumerate(patches, start=1):
@@ -219,6 +234,143 @@ def write_canopy_sqlite(path: Path, patches: list[dict[str, Any]], source: str =
         )
         connection.executemany(
             "INSERT INTO canopy_index (id, min_lng, max_lng, min_lat, max_lat) VALUES (?, ?, ?, ?, ?)",
+            index_rows,
+        )
+
+
+def write_green_areas_sqlite(path: Path, green_areas: list[dict[str, Any]], source: str = "geosampa_praca_largo") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with sqlite3.connect(path) as connection:
+        reset_tables(connection, "green_area", "green_area_index")
+        ensure_metadata_table(connection)
+        connection.executescript(
+            """
+            PRAGMA journal_mode = OFF;
+            PRAGMA synchronous = OFF;
+            CREATE TABLE green_area (
+              id INTEGER PRIMARY KEY,
+              source_id TEXT,
+              name TEXT NOT NULL,
+              lat REAL NOT NULL,
+              lng REAL NOT NULL,
+              width REAL NOT NULL,
+              height REAL NOT NULL,
+              min_lng REAL NOT NULL,
+              min_lat REAL NOT NULL,
+              max_lng REAL NOT NULL,
+              max_lat REAL NOT NULL,
+              entrances TEXT NOT NULL,
+              geometry TEXT
+            );
+            CREATE VIRTUAL TABLE green_area_index USING rtree(
+              id,
+              min_lng,
+              max_lng,
+              min_lat,
+              max_lat
+            );
+            """,
+        )
+        connection.execute(
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+            ("green_area_source", source),
+        )
+        rows = []
+        index_rows = []
+        for row_id, area in enumerate(green_areas, start=1):
+            geometry = area.get("geometry")
+            if geometry:
+                min_lng, min_lat, max_lng, max_lat = geometry_bounds(geometry)
+                geometry_json = json.dumps(geometry, separators=(",", ":"))
+            else:
+                min_lng = area["lng"] - area["width"] / 2
+                max_lng = area["lng"] + area["width"] / 2
+                min_lat = area["lat"] - area["height"] / 2
+                max_lat = area["lat"] + area["height"] / 2
+                geometry_json = None
+            rows.append(
+                (
+                    row_id,
+                    str(area.get("source_id")),
+                    area["name"],
+                    area["lat"],
+                    area["lng"],
+                    area["width"],
+                    area["height"],
+                    min_lng,
+                    min_lat,
+                    max_lng,
+                    max_lat,
+                    json.dumps(area.get("entrances", []), separators=(",", ":")),
+                    geometry_json,
+                ),
+            )
+            index_rows.append((row_id, min_lng, max_lng, min_lat, max_lat))
+        connection.executemany(
+            """
+            INSERT INTO green_area (
+              id, source_id, name, lat, lng, width, height, min_lng, min_lat, max_lng, max_lat, entrances, geometry
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        connection.executemany(
+            "INSERT INTO green_area_index (id, min_lng, max_lng, min_lat, max_lat) VALUES (?, ?, ?, ?, ?)",
+            index_rows,
+        )
+
+
+def write_trees_sqlite(path: Path, trees: list[dict[str, Any]], source: str = "geosampa_arborizacao_viaria") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    with sqlite3.connect(path) as connection:
+        reset_tables(connection, "tree", "tree_index")
+        ensure_metadata_table(connection)
+        connection.executescript(
+            """
+            PRAGMA journal_mode = OFF;
+            PRAGMA synchronous = OFF;
+            CREATE TABLE tree (
+              id INTEGER PRIMARY KEY,
+              source_id TEXT,
+              lat REAL NOT NULL,
+              lng REAL NOT NULL,
+              species TEXT NOT NULL
+            );
+            CREATE VIRTUAL TABLE tree_index USING rtree(
+              id,
+              min_lng,
+              max_lng,
+              min_lat,
+              max_lat
+            );
+            """,
+        )
+        connection.execute(
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+            ("tree_source", source),
+        )
+        rows = []
+        index_rows = []
+        for row_id, tree in enumerate(trees, start=1):
+            rows.append(
+                (
+                    row_id,
+                    str(tree.get("source_id")),
+                    tree["lat"],
+                    tree["lng"],
+                    tree.get("species") or "geosampa",
+                ),
+            )
+            index_rows.append((row_id, tree["lng"], tree["lng"], tree["lat"], tree["lat"]))
+        connection.executemany(
+            "INSERT INTO tree (id, source_id, lat, lng, species) VALUES (?, ?, ?, ?, ?)",
+            rows,
+        )
+        connection.executemany(
+            "INSERT INTO tree_index (id, min_lng, max_lng, min_lat, max_lat) VALUES (?, ?, ?, ?, ?)",
             index_rows,
         )
 

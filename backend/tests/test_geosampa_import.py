@@ -3,8 +3,15 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
 
-from geosampa_import import canopy_patch_from_feature, green_area_from_shape_record, tree_point_from_feature, write_canopy_sqlite
-from treecheck_api.data_repository import canopy_patches_from_sqlite
+from geosampa_import import (
+    canopy_patch_from_feature,
+    green_area_from_shape_record,
+    tree_point_from_feature,
+    write_canopy_sqlite,
+    write_green_areas_sqlite,
+    write_trees_sqlite,
+)
+from treecheck_api.data_repository import canopy_patches_from_sqlite, green_areas_from_sqlite, tree_points_from_sqlite
 
 
 def test_tree_point_from_geosampa_point_feature() -> None:
@@ -104,3 +111,42 @@ def test_write_canopy_sqlite_returns_indexed_polygons(tmp_path) -> None:
     assert len(patches) == 1
     assert patches[0]["source_id"] == "7"
     assert patches[0]["geometry"]["type"] == "Polygon"
+
+
+def test_write_spatial_sqlite_keeps_multiple_layers(tmp_path) -> None:
+    db_path = tmp_path / "treecheck.sqlite"
+    write_green_areas_sqlite(
+        db_path,
+        [
+            {
+                "name": "PC TESTE",
+                "lat": -23.56,
+                "lng": -46.65,
+                "width": 0.001,
+                "height": 0.001,
+                "entrances": [(-23.56, -46.65)],
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [-46.6505, -23.5605],
+                        [-46.6495, -23.5605],
+                        [-46.6495, -23.5595],
+                        [-46.6505, -23.5595],
+                        [-46.6505, -23.5605],
+                    ]],
+                },
+                "source_id": 99,
+            },
+        ],
+    )
+    write_trees_sqlite(
+        db_path,
+        [{"lat": -23.56, "lng": -46.65, "species": "Ipe", "source_id": 10}],
+    )
+
+    areas = green_areas_from_sqlite(db_path, -23.56, -46.65, 50)
+    trees = tree_points_from_sqlite(db_path, -23.56, -46.65, 50)
+
+    assert areas[0]["name"] == "PC TESTE"
+    assert areas[0]["geometry"]["type"] == "Polygon"
+    assert trees[0]["species"] == "Ipe"

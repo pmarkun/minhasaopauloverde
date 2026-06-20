@@ -2,7 +2,15 @@ import argparse
 import json
 from pathlib import Path
 
-from geosampa_import import features, in_bbox, iter_shapefile_records, load_geojson, tree_point_from_feature, tree_point_from_shape_record
+from geosampa_import import (
+    features,
+    in_bbox,
+    iter_shapefile_records,
+    load_geojson,
+    tree_point_from_feature,
+    tree_point_from_shape_record,
+    write_trees_sqlite,
+)
 
 
 def main() -> None:
@@ -14,6 +22,11 @@ def main() -> None:
     parser.add_argument("--north", type=float, default=-23.545)
     parser.add_argument("--east", type=float, default=-46.625)
     parser.add_argument("--all", action="store_true", help="Importa Sao Paulo inteira, sem filtrar pelo bbox piloto.")
+    parser.add_argument(
+        "--sqlite-output",
+        default="data/processed/treecheck.sqlite",
+        help="Arquivo SQLite operacional com indice RTree.",
+    )
     args = parser.parse_args()
 
     if Path(args.source).suffix.lower() in {".zip", ".shp"}:
@@ -37,6 +50,9 @@ def main() -> None:
         encoding="utf-8",
     )
     print(f"wrote {len(trees)} GeoSampa tree points to {output}")
+    if args.sqlite_output:
+        write_trees_sqlite(Path(args.sqlite_output), trees)
+        print(f"wrote {len(trees)} GeoSampa tree points to {args.sqlite_output}")
 
 
 if __name__ == "__main__":

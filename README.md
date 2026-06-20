@@ -359,14 +359,14 @@ nix develop --command python tools/import_geosampa_green_areas.py data/raw/GEOSA
 
 Esses comandos substituem:
 
+- `data/processed/treecheck.sqlite`, banco operacional com cobertura vegetal, pracas/largos, arvores e indices RTree
 - `data/processed/canopy_patches.json`, com fonte `geosampa_cobertura_vegetal`
-- `data/processed/canopy_polygons.sqlite`, com poligonos reais de cobertura vegetal e indice RTree
 - `data/processed/tree_points.json`, com fonte `geosampa_arborizacao_viaria`
 - `data/processed/green_areas.json`, com fonte `geosampa_praca_largo`
 
 Depois disso, o `/score` passa a reportar a fonte GeoSampa no campo `source`.
 
-Quando `canopy_polygons.sqlite` existe, o backend usa os poligonos reais da cobertura vegetal para calcular o percentual e para desenhar a camada no mapa. O JSON `canopy_patches.json` fica como fallback leve para ambientes sem SQLite processado.
+Quando `treecheck.sqlite` existe, o backend usa esse banco unico para calcular cobertura, encontrar pracas/largos, buscar arvores proximas e desenhar as camadas no mapa. Os JSONs ficam como fallback leve para ambientes sem SQLite processado.
 
 Por padrao, os importadores filtram o recorte piloto Paulista/Ibirapuera/Centro. Para processar Sao Paulo inteira, use `--all`:
 

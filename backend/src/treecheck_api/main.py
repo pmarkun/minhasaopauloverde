@@ -11,13 +11,15 @@ from pydantic import BaseModel, Field
 from treecheck_api.data_repository import (
     canopy_patches_near,
     canopy_patches_source,
-    green_areas,
+    green_areas_for_nearest,
+    green_areas_near,
     green_areas_source,
+    nearest_tree_points,
     pilot_territories,
     sample_addresses,
-    tree_points,
+    tree_points_near,
 )
-from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, nearby_items, walking_distance_m
+from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
 
 
 class TreeVisibility(str, Enum):
@@ -237,7 +239,7 @@ def nearest_green_area_distance(lat: float, lng: float) -> int:
 
 
 def nearest_green_area(lat: float, lng: float) -> dict:
-    park = min(green_areas(), key=lambda item: walking_distance_m(lat, lng, item["entrances"]))
+    park = min(green_areas_for_nearest(lat, lng), key=lambda item: walking_distance_m(lat, lng, item["entrances"]))
     return {
         **park,
         "distance_m": walking_distance_m(lat, lng, park["entrances"]),
@@ -269,7 +271,7 @@ def territory_indicator(territory: dict) -> TerritoryIndicator:
 
 
 def nearby_parks(lat: float, lng: float, radius_m: int) -> list[dict]:
-    candidates = nearby_items(lat, lng, radius_m, green_areas())
+    candidates = green_areas_near(lat, lng, radius_m)
     parks = [
         rectangle_feature(
             park["lng"],
@@ -294,11 +296,11 @@ def nearby_canopy(lat: float, lng: float, radius_m: int) -> list[dict]:
 def nearby_trees(lat: float, lng: float, radius_m: int) -> list[dict]:
     trees = [
         point_feature(tree["lng"], tree["lat"], {"species": tree["species"]})
-        for tree in nearby_items(lat, lng, radius_m, tree_points())
+        for tree in tree_points_near(lat, lng, radius_m)
     ]
     if len(trees) >= 3:
         return trees[:120]
-    nearest = sorted(tree_points(), key=lambda tree: haversine_m(lat, lng, tree["lat"], tree["lng"]))[:3]
+    nearest = sorted(nearest_tree_points(lat, lng), key=lambda tree: haversine_m(lat, lng, tree["lat"], tree["lng"]))[:3]
     return [point_feature(tree["lng"], tree["lat"], {"species": tree["species"]}) for tree in nearest]
 
 

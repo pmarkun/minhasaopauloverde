@@ -374,6 +374,8 @@ function renderWhenStyleReady(
 function renderMapData(map: maplibregl.Map, data: MapDataResponse) {
   upsertFillLayer(map, "buffer-300m", data.user_buffer_300m, "#b7f0c8", 0.18);
   upsertLineLayer(map, "buffer-300m-line", "buffer-300m", "#127044", 2);
+  upsertFillLayer(map, "canopy-layer", data.canopy, "#8fbe6b", 0.34);
+  upsertLineLayer(map, "canopy-layer-line", "canopy-layer", "#4f8f46", 0.8);
   upsertFillLayer(map, "parks-layer", data.parks, "#35b66c", 0.32);
   upsertLineLayer(map, "parks-layer-line", "parks-layer", "#087a42", 1.5);
   upsertFillLayer(map, "nearest-park-layer", data.nearest_park, "#14b86f", 0.54);
