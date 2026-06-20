@@ -9,8 +9,8 @@ type ScoreResponse = {
   location: { lat: number; lng: number };
   criteria: {
     trees_visible: { status: string; value: boolean | null; source: string; target: number };
-    canopy: { status: string; canopy_100m: number; canopy_300m: number; target: number };
-    park_access: { status: string; distance_m: number; target_m: number };
+    canopy: { status: string; canopy_100m: number; canopy_300m: number; target: number; source: string };
+    park_access: { status: string; distance_m: number; target_m: number; source: string };
   };
   score: { passed: number; total: number };
   recommendations: string[];
@@ -250,7 +250,10 @@ export default function Home() {
               <li>3 arvores visiveis: {labelStatus(score.criteria.trees_visible.status)}</li>
               <li>Cobertura 100 m: {score.criteria.canopy.canopy_100m}%</li>
               <li>Cobertura 300 m: {score.criteria.canopy.canopy_300m}%</li>
-              <li>Area verde mais proxima: {score.criteria.park_access.distance_m} m</li>
+              <li>
+                Area verde mais proxima: {score.criteria.park_access.distance_m} m{" "}
+                {score.criteria.park_access.source.includes("estimate") ? "(estimativa)" : ""}
+              </li>
             </ul>
             {score.recommendations.length > 0 && (
               <div>
