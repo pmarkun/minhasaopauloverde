@@ -269,6 +269,47 @@ Opcoes:
 
 Por padrao, o desenvolvimento deve rodar localmente.
 
+## Como rodar localmente
+
+Entre no shell de desenvolvimento:
+
+```bash
+nix develop
+```
+
+Instale as dependencias do frontend:
+
+```bash
+cd frontend
+npm install
+```
+
+Suba o backend:
+
+```bash
+python -m uvicorn treecheck_api.main:app --app-dir backend/src --reload
+```
+
+Em outro terminal, suba o frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+URLs locais:
+
+- Frontend: `http://127.0.0.1:3000`
+- Backend: `http://127.0.0.1:8000`
+- Healthcheck: `http://127.0.0.1:8000/health`
+
+Tambem e possivel executar comandos sem entrar no shell:
+
+```bash
+nix develop --command pytest backend/tests
+nix develop --command npm run build --prefix frontend
+```
+
 ## API inicial
 
 Endpoint:
@@ -337,4 +378,3 @@ O score individual e util, mas o maior valor publico pode estar no mapa agregado
 > Quem tem acesso a natureza na cidade?
 
 A regra 3-30-300 funciona como uma linguagem acessivel para transformar dados ambientais complexos em uma discussao publica sobre desigualdade urbana.
-
