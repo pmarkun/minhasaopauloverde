@@ -46,6 +46,7 @@ class CanopyCriterion(BaseModel):
 class ParkAccessCriterion(BaseModel):
     status: str
     distance_m: int
+    name: str
     target_m: int = 300
     source: str = "sample_local_walking_estimate"
 
@@ -73,6 +74,7 @@ class MapDataResponse(BaseModel):
     parks: dict
     canopy: dict
     trees: dict
+    nearest_park: dict
 
 
 class GeocodeResponse(BaseModel):
@@ -138,7 +140,8 @@ def score(
 ) -> ScoreResponse:
     canopy_100m = estimate_canopy_percent(lat, lng, radius_m=100, patches=canopy_patches())
     canopy_300m = estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches())
-    park_distance = nearest_green_area_distance(lat, lng)
+    nearest_park = nearest_green_area(lat, lng)
+    park_distance = nearest_park["distance_m"]
 
     trees_passed = trees_visible == TreeVisibility.yes
     canopy_passed = canopy_300m >= 30
@@ -162,6 +165,7 @@ def score(
             park_access=ParkAccessCriterion(
                 status=status_for_bool(park_passed),
                 distance_m=park_distance,
+                name=nearest_park["name"],
                 source=f"{green_areas_source()}_walking_estimate",
             ),
         ),
@@ -176,12 +180,15 @@ def score(
 def map_data(
     lat: Annotated[float, Query(ge=-90, le=90)],
     lng: Annotated[float, Query(ge=-180, le=180)],
+    radius_m: Annotated[int, Query(ge=50, le=1000)] = 300,
 ) -> MapDataResponse:
+    nearest_park = nearest_green_area(lat, lng)
     return MapDataResponse(
-        user_buffer_300m=geojson_feature_collection([circle_polygon(lng, lat, 300)]),
-        parks=geojson_feature_collection(nearby_parks(lat, lng)),
-        canopy=geojson_feature_collection(nearby_canopy(lat, lng)),
-        trees=geojson_feature_collection(nearby_trees(lat, lng)),
+        user_buffer_300m=geojson_feature_collection([circle_polygon(lng, lat, radius_m)]),
+        parks=geojson_feature_collection(nearby_parks(lat, lng, radius_m)),
+        canopy=geojson_feature_collection(nearby_canopy(lat, lng, radius_m)),
+        trees=geojson_feature_collection(nearby_trees(lat, lng, radius_m)),
+        nearest_park=geojson_feature_collection([park_feature(nearest_park)]),
     )
 
 
@@ -192,10 +199,16 @@ def status_for_bool(passed: bool, known: bool = True) -> str:
 
 
 def nearest_green_area_distance(lat: float, lng: float) -> int:
-    return min(
-        walking_distance_m(lat, lng, park["entrances"])
-        for park in green_areas()
-    )
+    return nearest_green_area(lat, lng)["distance_m"]
+
+
+def nearest_green_area(lat: float, lng: float) -> dict:
+    park = min(green_areas(), key=lambda item: walking_distance_m(lat, lng, item["entrances"]))
+    return {
+        **park,
+        "distance_m": walking_distance_m(lat, lng, park["entrances"]),
+        "source": green_areas_source(),
+    }
 
 
 def territory_indicator(territory: dict) -> TerritoryIndicator:
@@ -221,8 +234,8 @@ def territory_indicator(territory: dict) -> TerritoryIndicator:
     )
 
 
-def nearby_parks(lat: float, lng: float) -> list[dict]:
-    candidates = nearby_items(lat, lng, 2500, green_areas())
+def nearby_parks(lat: float, lng: float, radius_m: int) -> list[dict]:
+    candidates = nearby_items(lat, lng, radius_m, green_areas())
     parks = [
         rectangle_feature(
             park["lng"],
@@ -233,34 +246,23 @@ def nearby_parks(lat: float, lng: float) -> list[dict]:
         )
         for park in candidates
     ]
-    if parks:
-        return parks
-    nearest = min(green_areas(), key=lambda park: haversine_m(lat, lng, park["lat"], park["lng"]))
-    return [
-        rectangle_feature(
-            nearest["lng"],
-            nearest["lat"],
-            nearest["width"],
-            nearest["height"],
-            {"name": nearest["name"]},
-        ),
-    ]
+    return parks
 
 
-def nearby_canopy(lat: float, lng: float) -> list[dict]:
+def nearby_canopy(lat: float, lng: float, radius_m: int) -> list[dict]:
     return [
         circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])
-        for patch in nearby_items(lat, lng, 2500, canopy_patches())
+        for patch in nearby_items(lat, lng, radius_m, canopy_patches())
     ]
 
 
-def nearby_trees(lat: float, lng: float) -> list[dict]:
+def nearby_trees(lat: float, lng: float, radius_m: int) -> list[dict]:
     trees = [
         point_feature(tree["lng"], tree["lat"], {"species": tree["species"]})
-        for tree in nearby_items(lat, lng, 2500, tree_points())
+        for tree in nearby_items(lat, lng, radius_m, tree_points())
     ]
     if len(trees) >= 3:
-        return trees
+        return trees[:120]
     nearest = sorted(tree_points(), key=lambda tree: haversine_m(lat, lng, tree["lat"], tree["lng"]))[:3]
     return [point_feature(tree["lng"], tree["lat"], {"species": tree["species"]}) for tree in nearest]
 
@@ -313,3 +315,17 @@ def rectangle_feature(lng: float, lat: float, width: float, height: float, prope
         },
         "properties": properties,
     }
+
+
+def park_feature(park: dict) -> dict:
+    return rectangle_feature(
+        park["lng"],
+        park["lat"],
+        park["width"],
+        park["height"],
+        {
+            "name": park["name"],
+            "distance_m": park["distance_m"],
+            "source": park["source"],
+        },
+    )

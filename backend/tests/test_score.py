@@ -39,6 +39,7 @@ def test_score_contract() -> None:
     assert 0 <= body["score"]["passed"] <= 3
     assert "canopy_100m" in body["criteria"]["canopy"]
     assert "distance_m" in body["criteria"]["park_access"]
+    assert body["criteria"]["park_access"]["name"]
     assert body["criteria"]["canopy"]["source"] in {
         "sample_local",
         "openstreetmap_overpass_proxy",
@@ -48,14 +49,21 @@ def test_score_contract() -> None:
 
 
 def test_map_data_contract() -> None:
-    response = client.get("/map-data?lat=-23.55&lng=-46.63")
+    response = client.get("/map-data?lat=-23.55&lng=-46.63&radius_m=300")
     assert response.status_code == 200
     body = response.json()
     assert body["parks"]["type"] == "FeatureCollection"
     assert body["canopy"]["type"] == "FeatureCollection"
     assert body["trees"]["type"] == "FeatureCollection"
-    assert len(body["parks"]["features"]) >= 1
+    assert body["nearest_park"]["type"] == "FeatureCollection"
     assert len(body["trees"]["features"]) >= 3
+    assert len(body["nearest_park"]["features"]) == 1
+    assert body["nearest_park"]["features"][0]["properties"]["name"]
+
+
+def test_map_data_radius_validation() -> None:
+    response = client.get("/map-data?lat=-23.55&lng=-46.63&radius_m=20")
+    assert response.status_code == 422
 
 
 def test_unknown_tree_visibility_does_not_pass() -> None:
