@@ -14,7 +14,7 @@ from treecheck_api.data_repository import (
     sample_addresses,
     tree_points,
 )
-from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
+from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, nearby_items, walking_distance_m
 
 
 class TreeVisibility(str, Enum):
@@ -222,6 +222,7 @@ def territory_indicator(territory: dict) -> TerritoryIndicator:
 
 
 def nearby_parks(lat: float, lng: float) -> list[dict]:
+    candidates = nearby_items(lat, lng, 2500, green_areas())
     parks = [
         rectangle_feature(
             park["lng"],
@@ -230,8 +231,7 @@ def nearby_parks(lat: float, lng: float) -> list[dict]:
             park["height"],
             {"name": park["name"]},
         )
-        for park in green_areas()
-        if haversine_m(lat, lng, park["lat"], park["lng"]) <= 2500
+        for park in candidates
     ]
     if parks:
         return parks
@@ -250,16 +250,14 @@ def nearby_parks(lat: float, lng: float) -> list[dict]:
 def nearby_canopy(lat: float, lng: float) -> list[dict]:
     return [
         circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])
-        for patch in canopy_patches()
-        if haversine_m(lat, lng, patch["lat"], patch["lng"]) <= 2500
+        for patch in nearby_items(lat, lng, 2500, canopy_patches())
     ]
 
 
 def nearby_trees(lat: float, lng: float) -> list[dict]:
     trees = [
         point_feature(tree["lng"], tree["lat"], {"species": tree["species"]})
-        for tree in tree_points()
-        if haversine_m(lat, lng, tree["lat"], tree["lng"]) <= 2500
+        for tree in nearby_items(lat, lng, 2500, tree_points())
     ]
     if len(trees) >= 3:
         return trees

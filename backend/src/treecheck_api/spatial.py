@@ -23,11 +23,7 @@ def estimate_canopy_percent(lat: float, lng: float, radius_m: int, patches: list
     hits = 0
     total = 0
     lng_meter = DEG_LAT_M * cos(radians(lat))
-    nearby_patches = [
-        patch
-        for patch in patches
-        if haversine_m(lat, lng, patch["lat"], patch["lng"]) <= radius_m + patch["radius_m"]
-    ]
+    nearby_patches = nearby_items(lat, lng, radius_m + 180, patches)
     if not nearby_patches:
         return 0.0
     steps = range(-radius_m, radius_m + 1, step_m)
@@ -44,6 +40,19 @@ def estimate_canopy_percent(lat: float, lng: float, radius_m: int, patches: list
             ):
                 hits += 1
     return round((hits / total) * 100, 1) if total else 0.0
+
+
+def nearby_items(lat: float, lng: float, radius_m: int, items: list[dict]) -> list[dict]:
+    lat_delta = radius_m / DEG_LAT_M
+    lng_meter = DEG_LAT_M * cos(radians(lat))
+    lng_delta = radius_m / lng_meter if lng_meter else lat_delta
+    return [
+        item
+        for item in items
+        if lat - lat_delta <= item["lat"] <= lat + lat_delta
+        and lng - lng_delta <= item["lng"] <= lng + lng_delta
+        and haversine_m(lat, lng, item["lat"], item["lng"]) <= radius_m + item.get("radius_m", 0)
+    ]
 
 
 def circle_polygon(lng: float, lat: float, radius_m: int) -> dict:

@@ -348,14 +348,24 @@ Os importadores tambem aceitam os ZIPs de Shapefile baixados do GeoSampa:
 ```bash
 nix develop --command python tools/import_geosampa_canopy.py data/raw/SIRGAS_SHP_VEGETACAO_SIGNIFICATIVA.zip
 nix develop --command python tools/import_geosampa_trees.py data/raw/SIRGAS_SHP_arvore.zip
+nix develop --command python tools/import_geosampa_green_areas.py data/raw/GEOSAMPA_v_praca_largo.zip
 ```
 
 Esses comandos substituem:
 
 - `data/processed/canopy_patches.json`, com fonte `geosampa_cobertura_vegetal`
 - `data/processed/tree_points.json`, com fonte `geosampa_arborizacao_viaria`
+- `data/processed/green_areas.json`, com fonte `geosampa_praca_largo`
 
 Depois disso, o `/score` passa a reportar a fonte GeoSampa no campo `source`.
+
+Por padrao, os importadores filtram o recorte piloto Paulista/Ibirapuera/Centro. Para processar Sao Paulo inteira, use `--all`:
+
+```bash
+nix develop --command python tools/import_geosampa_canopy.py data/raw/SIRGAS_SHP_VEGETACAO_SIGNIFICATIVA.zip --all
+nix develop --command python tools/import_geosampa_trees.py data/raw/SIRGAS_SHP_arvore.zip --all
+nix develop --command python tools/import_geosampa_green_areas.py data/raw/GEOSAMPA_v_praca_largo.zip --all
+```
 
 ## API inicial
 

@@ -13,13 +13,14 @@ def main() -> None:
     parser.add_argument("--west", type=float, default=-46.675)
     parser.add_argument("--north", type=float, default=-23.545)
     parser.add_argument("--east", type=float, default=-46.625)
+    parser.add_argument("--all", action="store_true", help="Importa Sao Paulo inteira, sem filtrar pelo bbox piloto.")
     args = parser.parse_args()
 
     if Path(args.source).suffix.lower() in {".zip", ".shp"}:
         trees = []
         for item in iter_shapefile_records(args.source, default_epsg=31983):
             tree = tree_point_from_shape_record(item)
-            if tree and in_bbox(tree["lat"], tree["lng"], args.south, args.west, args.north, args.east):
+            if tree and (args.all or in_bbox(tree["lat"], tree["lng"], args.south, args.west, args.north, args.east)):
                 trees.append(tree)
     else:
         payload = load_geojson(args.source)
@@ -27,7 +28,7 @@ def main() -> None:
             tree
             for feature in features(payload)
             if (tree := tree_point_from_feature(feature))
-            and in_bbox(tree["lat"], tree["lng"], args.south, args.west, args.north, args.east)
+            and (args.all or in_bbox(tree["lat"], tree["lng"], args.south, args.west, args.north, args.east))
         ]
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

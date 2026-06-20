@@ -26,7 +26,7 @@ def load_shapefile_records(source: str, default_epsg: int = 31983) -> list[dict[
             shp_path = next(Path(temp_dir).rglob("*.shp"))
         else:
             shp_path = source_path
-        reader = shapefile.Reader(str(shp_path))
+        reader = shapefile.Reader(str(shp_path), encoding=encoding_for(shp_path))
         transformer = transformer_for(shp_path, default_epsg)
         fields = [field[0] for field in reader.fields[1:]]
         records = []
@@ -51,7 +51,7 @@ def iter_shapefile_records(source: str, default_epsg: int = 31983):
             shp_path = next(Path(temp_dir).rglob("*.shp"))
         else:
             shp_path = source_path
-        reader = shapefile.Reader(str(shp_path))
+        reader = shapefile.Reader(str(shp_path), encoding=encoding_for(shp_path))
         transformer = transformer_for(shp_path, default_epsg)
         fields = [field[0] for field in reader.fields[1:]]
         for index, shape_record in enumerate(reader.iterShapeRecords()):
@@ -70,6 +70,18 @@ def transformer_for(shp_path: Path, default_epsg: int) -> pyproj.Transformer:
     else:
         source_crs = pyproj.CRS.from_epsg(default_epsg)
     return pyproj.Transformer.from_crs(source_crs, pyproj.CRS.from_epsg(4326), always_xy=True)
+
+
+def encoding_for(shp_path: Path) -> str:
+    cpg_path = shp_path.with_suffix(".cpg")
+    if not cpg_path.exists():
+        return "latin1"
+    value = cpg_path.read_text(encoding="utf-8", errors="ignore").strip().lower()
+    if value in {"1252", "windows-1252"}:
+        return "cp1252"
+    if value in {"65001", "utf-8"}:
+        return "utf-8"
+    return value or "latin1"
 
 
 def tree_point_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -101,6 +113,35 @@ def canopy_patch_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | Non
         "lng": round(lng, 7),
         "radius_m": radius,
         "source_id": item["index"],
+    }
+
+
+def green_area_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
+    shape = item["shape"]
+    if not shape.points:
+        return None
+    min_x, min_y, max_x, max_y = shape.bbox
+    transformer = item["transformer"]
+    west, south = transformer.transform(min_x, min_y)
+    east, north = transformer.transform(max_x, max_y)
+    center_lng = (west + east) / 2
+    center_lat = (south + north) / 2
+    properties = item["properties"]
+    name_parts = [
+        str(properties.get("categoria") or "").strip(),
+        str(properties.get("titulo") or "").strip(),
+        str(properties.get("preposicao") or "").strip(),
+        str(properties.get("nome") or "").strip(),
+    ]
+    name = " ".join(part for part in name_parts if part) or f"GeoSampa {item['index']}"
+    return {
+        "name": name,
+        "lat": round(center_lat, 7),
+        "lng": round(center_lng, 7),
+        "width": max(0.0001, abs(east - west)),
+        "height": max(0.0001, abs(north - south)),
+        "entrances": [(round(center_lat, 7), round(center_lng, 7))],
+        "source_id": properties.get("cd_identif") or item["index"],
     }
 
 
