@@ -219,11 +219,27 @@ export default function Home() {
         <p className="eyebrow">Minha Sao Paulo Verde</p>
         <h1>Quanto verde tem perto da sua casa?</h1>
         <p className="intro">
-          Veja seu entorno em 300 metros e gere uma imagem para cobrar, comparar e compartilhar.
+          Cecil Konijnendijk, especialista holandês em arborização urbana, criou uma regra simples para
+          verificar se o seu entorno é verde o suficiente.
         </p>
 
+        <div className="ruleIntro" aria-label="Regra 3-30-300">
+          <div>
+            <strong>3</strong>
+            <span>árvores visíveis da sua janela</span>
+          </div>
+          <div>
+            <strong>30</strong>
+            <span>% de cobertura verde no entorno</span>
+          </div>
+          <div>
+            <strong>300</strong>
+            <span>metros até uma praça ou área verde</span>
+          </div>
+        </div>
+
         <fieldset>
-          <legend>Da sua janela principal, da para ver pelo menos 3 arvores?</legend>
+          <legend>E aí? Você sabe como está seu entorno? Primeiro olhe pela janela: você vê 3 árvores?</legend>
           <div className="segmented twoChoices">
             {[
               ["yes", "Sim :)"],

@@ -111,6 +111,40 @@ h2 {
   margin: 0;
 }
 
+.ruleIntro {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+
+.ruleIntro div {
+  align-items: center;
+  background: rgba(247, 244, 234, 0.72);
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 54px 1fr;
+  padding: 10px 12px;
+}
+
+.ruleIntro div:first-child {
+  border-top: 0;
+}
+
+.ruleIntro strong {
+  color: var(--green-dark);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.ruleIntro span {
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
 .formStack {
   display: grid;
   gap: 12px;
