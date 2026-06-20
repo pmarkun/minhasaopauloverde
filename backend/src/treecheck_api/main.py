@@ -1,4 +1,5 @@
 from enum import Enum
+from math import asin, atan2, cos, sin
 from typing import Annotated
 
 from fastapi import FastAPI, Query
@@ -57,6 +58,13 @@ class ScoreResponse(BaseModel):
     recommendations: list[str] = Field(default_factory=list)
 
 
+class MapDataResponse(BaseModel):
+    user_buffer_300m: dict
+    parks: dict
+    canopy: dict
+    trees: dict
+
+
 app = FastAPI(title="TreeCheck API", version="0.1.0")
 
 app.add_middleware(
@@ -113,6 +121,36 @@ def score(
     )
 
 
+@app.get("/map-data", response_model=MapDataResponse)
+def map_data(
+    lat: Annotated[float, Query(ge=-90, le=90)],
+    lng: Annotated[float, Query(ge=-180, le=180)],
+) -> MapDataResponse:
+    return MapDataResponse(
+        user_buffer_300m=geojson_feature_collection([circle_polygon(lng, lat, 300)]),
+        parks=geojson_feature_collection(
+            [
+                rectangle_feature(lng + 0.0045, lat + 0.0028, 0.0035, 0.0022, {"name": "Praca Verde"}),
+                rectangle_feature(lng - 0.0052, lat - 0.003, 0.004, 0.0025, {"name": "Parque Local"}),
+            ],
+        ),
+        canopy=geojson_feature_collection(
+            [
+                rectangle_feature(lng - 0.002, lat + 0.002, 0.0025, 0.0012, {"canopy": "alta"}),
+                rectangle_feature(lng + 0.002, lat - 0.0018, 0.003, 0.0015, {"canopy": "media"}),
+            ],
+        ),
+        trees=geojson_feature_collection(
+            [
+                point_feature(lng + 0.001, lat + 0.0015, {"species": "mock"}),
+                point_feature(lng - 0.0012, lat + 0.0006, {"species": "mock"}),
+                point_feature(lng + 0.0028, lat - 0.001, {"species": "mock"}),
+                point_feature(lng - 0.0024, lat - 0.0014, {"species": "mock"}),
+            ],
+        ),
+    )
+
+
 def status_for_bool(passed: bool, known: bool = True) -> str:
     if not known:
         return "unknown"
@@ -145,3 +183,60 @@ def recommendations(
         items.append("Responda sobre as arvores visiveis para completar o criterio 3.")
     return items
 
+
+def geojson_feature_collection(features: list[dict]) -> dict:
+    return {"type": "FeatureCollection", "features": features}
+
+
+def point_feature(lng: float, lat: float, properties: dict) -> dict:
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [lng, lat]},
+        "properties": properties,
+    }
+
+
+def rectangle_feature(lng: float, lat: float, width: float, height: float, properties: dict) -> dict:
+    west = lng - width / 2
+    east = lng + width / 2
+    south = lat - height / 2
+    north = lat + height / 2
+    return {
+        "type": "Feature",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+                [west, south],
+                [east, south],
+                [east, north],
+                [west, north],
+                [west, south],
+            ]],
+        },
+        "properties": properties,
+    }
+
+
+def circle_polygon(lng: float, lat: float, radius_m: int) -> dict:
+    points = 72
+    earth_radius = 6_371_000
+    lat_rad = lat * 3.141592653589793 / 180
+    lng_rad = lng * 3.141592653589793 / 180
+    distance = radius_m / earth_radius
+    coordinates = []
+    for index in range(points + 1):
+        bearing = (index / points) * 3.141592653589793 * 2
+        point_lat = asin(
+            sin(lat_rad) * cos(distance)
+            + cos(lat_rad) * sin(distance) * cos(bearing),
+        )
+        point_lng = lng_rad + atan2(
+            sin(bearing) * sin(distance) * cos(lat_rad),
+            cos(distance) - sin(lat_rad) * sin(point_lat),
+        )
+        coordinates.append([point_lng * 180 / 3.141592653589793, point_lat * 180 / 3.141592653589793])
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [coordinates]},
+        "properties": {},
+    }

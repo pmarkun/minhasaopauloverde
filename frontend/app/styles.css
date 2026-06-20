@@ -189,12 +189,61 @@ legend {
 
 .mapWrap {
   min-height: 100vh;
+  position: relative;
 }
 
 .map {
   height: 100%;
   min-height: 100vh;
   width: 100%;
+}
+
+.legend {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  bottom: 18px;
+  box-shadow: 0 8px 24px rgba(21, 33, 29, 0.12);
+  display: grid;
+  gap: 8px;
+  left: 18px;
+  padding: 12px;
+  position: absolute;
+  width: min(220px, calc(100% - 36px));
+  z-index: 1;
+}
+
+.legend span {
+  align-items: center;
+  color: var(--ink);
+  display: flex;
+  font-size: 13px;
+  gap: 8px;
+}
+
+.swatch {
+  border: 1px solid rgba(21, 33, 29, 0.24);
+  display: inline-block;
+  flex: 0 0 14px;
+  height: 14px;
+  width: 14px;
+}
+
+.swatch.buffer {
+  background: #86efac;
+}
+
+.swatch.canopy {
+  background: #166534;
+}
+
+.swatch.park {
+  background: #34d399;
+}
+
+.swatch.tree {
+  background: #14532d;
+  border-radius: 999px;
 }
 
 @media (max-width: 860px) {
@@ -223,4 +272,3 @@ legend {
     grid-template-columns: 1fr;
   }
 }
-

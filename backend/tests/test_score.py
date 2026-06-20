@@ -23,6 +23,17 @@ def test_score_contract() -> None:
     assert "distance_m" in body["criteria"]["park_access"]
 
 
+def test_map_data_contract() -> None:
+    response = client.get("/map-data?lat=-23.55&lng=-46.63")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["parks"]["type"] == "FeatureCollection"
+    assert body["canopy"]["type"] == "FeatureCollection"
+    assert body["trees"]["type"] == "FeatureCollection"
+    assert len(body["parks"]["features"]) >= 1
+    assert len(body["trees"]["features"]) >= 3
+
+
 def test_unknown_tree_visibility_does_not_pass() -> None:
     response = client.get("/score?lat=-23.55&lng=-46.63")
     body = response.json()
@@ -40,4 +51,3 @@ def test_recommendations_for_failed_inputs() -> None:
     items = recommendations(24.0, 480, trees_visible="no")  # type: ignore[arg-type]
     assert "Faltam 6.0 pontos percentuais para atingir 30%." in items
     assert "O parque mais proximo esta 180 m alem da meta de 300 m." in items
-

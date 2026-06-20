@@ -16,6 +16,15 @@ type ScoreResponse = {
   recommendations: string[];
 };
 
+type FeatureCollection = GeoJSON.FeatureCollection;
+
+type MapDataResponse = {
+  user_buffer_300m: FeatureCollection;
+  parks: FeatureCollection;
+  canopy: FeatureCollection;
+  trees: FeatureCollection;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_TREECHECK_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_LOCATION = { lat: -23.55, lng: -46.63 };
 
@@ -26,6 +35,7 @@ export default function Home() {
   const [lng, setLng] = useState(String(DEFAULT_LOCATION.lng));
   const [treesVisible, setTreesVisible] = useState<TreeVisibility>("unknown");
   const [score, setScore] = useState<ScoreResponse | null>(null);
+  const [mapData, setMapData] = useState<MapDataResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -53,7 +63,6 @@ export default function Home() {
 
     currentMap.flyTo({ center: [parsedLocation.lng, parsedLocation.lat], zoom: 14 });
     const sourceId = "user-location";
-    const bufferId = "buffer-300m";
     const point = {
       type: "Feature" as const,
       geometry: {
@@ -81,35 +90,12 @@ export default function Home() {
         (currentMap.getSource(sourceId) as maplibregl.GeoJSONSource).setData(point);
       }
 
-      const buffer = circlePolygon(parsedLocation.lng, parsedLocation.lat, 300);
-      if (!currentMap.getSource(bufferId)) {
-        currentMap.addSource(bufferId, { type: "geojson", data: buffer });
-        currentMap.addLayer({
-          id: bufferId,
-          type: "fill",
-          source: bufferId,
-          paint: {
-            "fill-color": "#86efac",
-            "fill-opacity": 0.24,
-          },
-        });
-        currentMap.addLayer({
-          id: `${bufferId}-line`,
-          type: "line",
-          source: bufferId,
-          paint: {
-            "line-color": "#15803d",
-            "line-width": 2,
-          },
-        });
-      } else {
-        (currentMap.getSource(bufferId) as maplibregl.GeoJSONSource).setData(buffer);
-      }
+      if (mapData) renderMapData(currentMap, mapData);
     };
 
     if (currentMap.isStyleLoaded()) upsertLayers();
     currentMap.once("load", upsertLayers);
-  }, [parsedLocation]);
+  }, [mapData, parsedLocation]);
 
   async function calculateScore() {
     setError("");
@@ -123,11 +109,22 @@ export default function Home() {
       const response = await fetch(`${API_BASE}/score?${params}`);
       if (!response.ok) throw new Error("Nao foi possivel calcular o score.");
       setScore(await response.json());
+      await loadMapData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadMapData() {
+    const params = new URLSearchParams({
+      lat: String(parsedLocation.lat),
+      lng: String(parsedLocation.lng),
+    });
+    const response = await fetch(`${API_BASE}/map-data?${params}`);
+    if (!response.ok) throw new Error("Nao foi possivel carregar as camadas do mapa.");
+    setMapData(await response.json());
   }
 
   function useGps() {
@@ -223,9 +220,73 @@ export default function Home() {
 
       <section className="mapWrap" aria-label="Mapa">
         <div ref={mapContainer} className="map" />
+        <div className="legend" aria-label="Legenda">
+          <span><b className="swatch buffer" />300 m</span>
+          <span><b className="swatch canopy" />Cobertura</span>
+          <span><b className="swatch park" />Areas verdes</span>
+          <span><b className="swatch tree" />Arvores</span>
+        </div>
       </section>
     </main>
   );
+}
+
+function renderMapData(map: maplibregl.Map, data: MapDataResponse) {
+  upsertFillLayer(map, "buffer-300m", data.user_buffer_300m, "#86efac", 0.2);
+  upsertLineLayer(map, "buffer-300m-line", "buffer-300m", "#15803d", 2);
+  upsertFillLayer(map, "canopy-layer", data.canopy, "#166534", 0.42);
+  upsertFillLayer(map, "parks-layer", data.parks, "#34d399", 0.48);
+  upsertLineLayer(map, "parks-layer-line", "parks-layer", "#047857", 2);
+  upsertCircleLayer(map, "trees-layer", data.trees);
+}
+
+function upsertFillLayer(
+  map: maplibregl.Map,
+  id: string,
+  data: FeatureCollection,
+  color: string,
+  opacity: number,
+) {
+  if (!map.getSource(id)) {
+    map.addSource(id, { type: "geojson", data });
+    map.addLayer({
+      id,
+      type: "fill",
+      source: id,
+      paint: { "fill-color": color, "fill-opacity": opacity },
+    });
+    return;
+  }
+  (map.getSource(id) as maplibregl.GeoJSONSource).setData(data);
+}
+
+function upsertLineLayer(map: maplibregl.Map, id: string, sourceId: string, color: string, width: number) {
+  if (map.getLayer(id)) return;
+  map.addLayer({
+    id,
+    type: "line",
+    source: sourceId,
+    paint: { "line-color": color, "line-width": width },
+  });
+}
+
+function upsertCircleLayer(map: maplibregl.Map, id: string, data: FeatureCollection) {
+  if (!map.getSource(id)) {
+    map.addSource(id, { type: "geojson", data });
+    map.addLayer({
+      id,
+      type: "circle",
+      source: id,
+      paint: {
+        "circle-radius": 5,
+        "circle-color": "#14532d",
+        "circle-stroke-width": 2,
+        "circle-stroke-color": "#ffffff",
+      },
+    });
+    return;
+  }
+  (map.getSource(id) as maplibregl.GeoJSONSource).setData(data);
 }
 
 function labelStatus(status: string) {
@@ -233,37 +294,3 @@ function labelStatus(status: string) {
   if (status === "failed") return "nao atendido";
   return "nao informado";
 }
-
-function circlePolygon(lng: number, lat: number, radiusMeters: number) {
-  const points = 72;
-  const coords: number[][] = [];
-  const earthRadius = 6371000;
-  const latRad = (lat * Math.PI) / 180;
-  const lngRad = (lng * Math.PI) / 180;
-  const distance = radiusMeters / earthRadius;
-
-  for (let i = 0; i <= points; i += 1) {
-    const bearing = (i / points) * Math.PI * 2;
-    const pointLat = Math.asin(
-      Math.sin(latRad) * Math.cos(distance) +
-        Math.cos(latRad) * Math.sin(distance) * Math.cos(bearing),
-    );
-    const pointLng =
-      lngRad +
-      Math.atan2(
-        Math.sin(bearing) * Math.sin(distance) * Math.cos(latRad),
-        Math.cos(distance) - Math.sin(latRad) * Math.sin(pointLat),
-      );
-    coords.push([(pointLng * 180) / Math.PI, (pointLat * 180) / Math.PI]);
-  }
-
-  return {
-    type: "Feature" as const,
-    geometry: {
-      type: "Polygon" as const,
-      coordinates: [coords],
-    },
-    properties: {},
-  };
-}
-
