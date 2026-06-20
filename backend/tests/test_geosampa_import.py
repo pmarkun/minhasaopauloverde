@@ -3,7 +3,8 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[2] / "tools"))
 
-from geosampa_import import canopy_patch_from_feature, green_area_from_shape_record, tree_point_from_feature
+from geosampa_import import canopy_patch_from_feature, green_area_from_shape_record, tree_point_from_feature, write_canopy_sqlite
+from treecheck_api.data_repository import canopy_patches_from_sqlite
 
 
 def test_tree_point_from_geosampa_point_feature() -> None:
@@ -75,3 +76,31 @@ def test_green_area_from_shape_record() -> None:
     assert area is not None
     assert area["name"] == "PC CELSO DELMANTO"
     assert area["source_id"] == 30752
+
+
+def test_write_canopy_sqlite_returns_indexed_polygons(tmp_path) -> None:
+    db_path = tmp_path / "canopy.sqlite"
+    patch = {
+        "lat": -23.56,
+        "lng": -46.65,
+        "radius_m": 20,
+        "source_id": 7,
+        "bounds": (-46.6502, -23.5602, -46.6498, -23.5598),
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[
+                [-46.6502, -23.5602],
+                [-46.6498, -23.5602],
+                [-46.6498, -23.5598],
+                [-46.6502, -23.5598],
+                [-46.6502, -23.5602],
+            ]],
+        },
+    }
+
+    write_canopy_sqlite(db_path, [patch])
+
+    patches = canopy_patches_from_sqlite(db_path, -23.56, -46.65, 50)
+    assert len(patches) == 1
+    assert patches[0]["source_id"] == "7"
+    assert patches[0]["geometry"]["type"] == "Polygon"

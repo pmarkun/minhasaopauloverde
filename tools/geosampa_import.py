@@ -1,5 +1,6 @@
 import json
 import math
+import sqlite3
 import tempfile
 import urllib.request
 import zipfile
@@ -120,6 +121,13 @@ def shape_geometry_geojson(item: dict[str, Any]) -> dict[str, Any] | None:
     return {"type": "Polygon", "coordinates": rings}
 
 
+def shape_bounds_wgs84(item: dict[str, Any]) -> tuple[float, float, float, float]:
+    min_x, min_y, max_x, max_y = item["shape"].bbox
+    west, south = item["transformer"].transform(min_x, min_y)
+    east, north = item["transformer"].transform(max_x, max_y)
+    return min(west, east), min(south, north), max(west, east), max(south, north)
+
+
 def canopy_patch_from_shape_record(item: dict[str, Any], include_geometry: bool = False) -> dict[str, Any] | None:
     shape = item["shape"]
     if not shape.points:
@@ -137,7 +145,82 @@ def canopy_patch_from_shape_record(item: dict[str, Any], include_geometry: bool 
     }
     if include_geometry:
         patch["geometry"] = shape_geometry_geojson(item)
+        patch["bounds"] = shape_bounds_wgs84(item)
     return patch
+
+
+def write_canopy_sqlite(path: Path, patches: list[dict[str, Any]], source: str = "geosampa_cobertura_vegetal") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            PRAGMA journal_mode = OFF;
+            PRAGMA synchronous = OFF;
+            CREATE TABLE metadata (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+            CREATE TABLE canopy (
+              id INTEGER PRIMARY KEY,
+              source_id TEXT,
+              lat REAL NOT NULL,
+              lng REAL NOT NULL,
+              radius_m REAL NOT NULL,
+              min_lng REAL NOT NULL,
+              min_lat REAL NOT NULL,
+              max_lng REAL NOT NULL,
+              max_lat REAL NOT NULL,
+              geometry TEXT NOT NULL
+            );
+            CREATE VIRTUAL TABLE canopy_index USING rtree(
+              id,
+              min_lng,
+              max_lng,
+              min_lat,
+              max_lat
+            );
+            """,
+        )
+        connection.execute("INSERT INTO metadata (key, value) VALUES (?, ?)", ("source", source))
+        rows = []
+        index_rows = []
+        for row_id, patch in enumerate(patches, start=1):
+            geometry = patch.get("geometry")
+            bounds = patch.get("bounds")
+            if not geometry or not bounds:
+                continue
+            min_lng, min_lat, max_lng, max_lat = bounds
+            rows.append(
+                (
+                    row_id,
+                    str(patch.get("source_id")),
+                    patch["lat"],
+                    patch["lng"],
+                    patch["radius_m"],
+                    min_lng,
+                    min_lat,
+                    max_lng,
+                    max_lat,
+                    json.dumps(geometry, separators=(",", ":")),
+                ),
+            )
+            index_rows.append((row_id, min_lng, max_lng, min_lat, max_lat))
+        connection.executemany(
+            """
+            INSERT INTO canopy (
+              id, source_id, lat, lng, radius_m, min_lng, min_lat, max_lng, max_lat, geometry
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+        connection.executemany(
+            "INSERT INTO canopy_index (id, min_lng, max_lng, min_lat, max_lat) VALUES (?, ?, ?, ?, ?)",
+            index_rows,
+        )
 
 
 def green_area_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -201,18 +284,22 @@ def point_from_feature(feature: dict[str, Any]) -> tuple[float, float] | None:
     return None
 
 
-def canopy_patch_from_feature(feature: dict[str, Any]) -> dict[str, Any] | None:
+def canopy_patch_from_feature(feature: dict[str, Any], include_geometry: bool = False) -> dict[str, Any] | None:
     point = point_from_feature(feature)
     if not point:
         return None
     lat, lng = point
     radius = radius_from_geometry(feature.get("geometry") or {})
-    return {
+    patch = {
         "lat": lat,
         "lng": lng,
         "radius_m": radius,
         "source_id": source_id(feature),
     }
+    if include_geometry and feature.get("geometry"):
+        patch["geometry"] = feature["geometry"]
+        patch["bounds"] = geometry_bounds(feature["geometry"])
+    return patch
 
 
 def tree_point_from_feature(feature: dict[str, Any]) -> dict[str, Any] | None:
@@ -253,6 +340,31 @@ def radius_from_geometry(geometry: dict[str, Any]) -> int:
     lat, lng = centroid(ring)
     distances = [distance_m(lat, lng, float(point[1]), float(point[0])) for point in ring]
     return max(8, min(180, round(max(distances) if distances else 12)))
+
+
+def geometry_bounds(geometry: dict[str, Any]) -> tuple[float, float, float, float]:
+    points = list(iter_geometry_points(geometry))
+    if not points:
+        raise ValueError("Geometria sem coordenadas.")
+    lngs = [point[0] for point in points]
+    lats = [point[1] for point in points]
+    return min(lngs), min(lats), max(lngs), max(lats)
+
+
+def iter_geometry_points(geometry: dict[str, Any]):
+    coordinates = geometry.get("coordinates") or []
+    geometry_type = geometry.get("type")
+    if geometry_type == "Point":
+        yield float(coordinates[0]), float(coordinates[1])
+    elif geometry_type == "Polygon":
+        for ring in coordinates:
+            for lng, lat, *_ in ring:
+                yield float(lng), float(lat)
+    elif geometry_type == "MultiPolygon":
+        for polygon in coordinates:
+            for ring in polygon:
+                for lng, lat, *_ in ring:
+                    yield float(lng), float(lat)
 
 
 def distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

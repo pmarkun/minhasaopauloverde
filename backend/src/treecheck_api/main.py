@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from treecheck_api.data_repository import (
-    canopy_patches,
+    canopy_patches_near,
     canopy_patches_source,
     green_areas,
     green_areas_source,
@@ -172,8 +172,8 @@ def score(
     lng: Annotated[float, Query(ge=-180, le=180)],
     trees_visible: TreeVisibility = TreeVisibility.unknown,
 ) -> ScoreResponse:
-    canopy_100m = estimate_canopy_percent(lat, lng, radius_m=100, patches=canopy_patches())
-    canopy_300m = estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches())
+    canopy_100m = estimate_canopy_percent(lat, lng, radius_m=100, patches=canopy_patches_near(lat, lng, 100))
+    canopy_300m = estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches_near(lat, lng, 300))
     nearest_park = nearest_green_area(lat, lng)
     park_distance = nearest_park["distance_m"]
 
@@ -248,7 +248,7 @@ def nearest_green_area(lat: float, lng: float) -> dict:
 def territory_indicator(territory: dict) -> TerritoryIndicator:
     samples = territory["samples"]
     canopy_values = [
-        estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches())
+        estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches_near(lat, lng, 300))
         for lat, lng in samples
     ]
     park_distances = [nearest_green_area_distance(lat, lng) for lat, lng in samples]
@@ -287,7 +287,7 @@ def nearby_parks(lat: float, lng: float, radius_m: int) -> list[dict]:
 def nearby_canopy(lat: float, lng: float, radius_m: int) -> list[dict]:
     return [
         polygon_or_circle_feature(patch)
-        for patch in nearby_items(lat, lng, radius_m, canopy_patches())
+        for patch in canopy_patches_near(lat, lng, radius_m)
     ]
 
 

@@ -23,7 +23,7 @@ def estimate_canopy_percent(lat: float, lng: float, radius_m: int, patches: list
     hits = 0
     total = 0
     lng_meter = DEG_LAT_M * cos(radians(lat))
-    nearby_patches = nearby_items(lat, lng, radius_m + 180, patches)
+    nearby_patches = patches if any(patch.get("geometry") for patch in patches) else nearby_items(lat, lng, radius_m + 180, patches)
     if not nearby_patches:
         return 0.0
     steps = range(-radius_m, radius_m + 1, step_m)
@@ -34,12 +34,45 @@ def estimate_canopy_percent(lat: float, lng: float, radius_m: int, patches: list
             total += 1
             point_lat = lat + y_m / DEG_LAT_M
             point_lng = lng + x_m / lng_meter
-            if any(
-                haversine_m(point_lat, point_lng, patch["lat"], patch["lng"]) <= patch["radius_m"]
-                for patch in nearby_patches
-            ):
+            if any(point_hits_patch(point_lat, point_lng, patch) for patch in nearby_patches):
                 hits += 1
     return round((hits / total) * 100, 1) if total else 0.0
+
+
+def point_hits_patch(lat: float, lng: float, patch: dict) -> bool:
+    geometry = patch.get("geometry")
+    if geometry:
+        return point_in_geometry(lng, lat, geometry)
+    return haversine_m(lat, lng, patch["lat"], patch["lng"]) <= patch["radius_m"]
+
+
+def point_in_geometry(lng: float, lat: float, geometry: dict) -> bool:
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates") or []
+    if geometry_type == "Polygon":
+        return point_in_polygon(lng, lat, coordinates)
+    if geometry_type == "MultiPolygon":
+        return any(point_in_polygon(lng, lat, polygon) for polygon in coordinates)
+    return False
+
+
+def point_in_polygon(lng: float, lat: float, rings: list) -> bool:
+    return any(point_in_ring(lng, lat, ring) for ring in rings)
+
+
+def point_in_ring(lng: float, lat: float, ring: list[list[float]]) -> bool:
+    inside = False
+    if len(ring) < 4:
+        return False
+    previous_lng, previous_lat = ring[-1]
+    for current_lng, current_lat in ring:
+        crosses = (current_lat > lat) != (previous_lat > lat)
+        if crosses:
+            slope_lng = (previous_lng - current_lng) * (lat - current_lat) / (previous_lat - current_lat) + current_lng
+            if lng < slope_lng:
+                inside = not inside
+        previous_lng, previous_lat = current_lng, current_lat
+    return inside
 
 
 def nearby_items(lat: float, lng: float, radius_m: int, items: list[dict]) -> list[dict]:
@@ -53,6 +86,13 @@ def nearby_items(lat: float, lng: float, radius_m: int, items: list[dict]) -> li
         and lng - lng_delta <= item["lng"] <= lng + lng_delta
         and haversine_m(lat, lng, item["lat"], item["lng"]) <= radius_m + item.get("radius_m", 0)
     ]
+
+
+def bbox_for_radius(lat: float, lng: float, radius_m: int) -> tuple[float, float, float, float]:
+    lat_delta = radius_m / DEG_LAT_M
+    lng_meter = DEG_LAT_M * cos(radians(lat))
+    lng_delta = radius_m / lng_meter if lng_meter else lat_delta
+    return lng - lng_delta, lat - lat_delta, lng + lng_delta, lat + lat_delta
 
 
 def circle_polygon(lng: float, lat: float, radius_m: int) -> dict:
