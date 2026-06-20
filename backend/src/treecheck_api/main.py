@@ -1,7 +1,10 @@
 from enum import Enum
+import json
 from typing import Annotated
+import urllib.parse
+import urllib.request
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -118,17 +121,48 @@ def indicators() -> list[TerritoryIndicator]:
 
 @app.get("/geocode", response_model=GeocodeResponse)
 def geocode(q: Annotated[str, Query(min_length=3)]) -> GeocodeResponse:
+    nominatim = geocode_nominatim(q)
+    if nominatim:
+        return nominatim
+
     normalized = q.strip().lower()
     for key, (lat, lng, label) in sample_addresses().items():
         if key in normalized:
             return GeocodeResponse(query=q, lat=lat, lng=lng, label=label)
 
-    offset = (sum(ord(char) for char in normalized) % 1000) / 100000
+    raise HTTPException(status_code=404, detail="Endereco nao encontrado")
+
+
+def geocode_nominatim(q: str) -> GeocodeResponse | None:
+    params = urllib.parse.urlencode(
+        {
+            "q": f"{q}, Sao Paulo, SP, Brasil",
+            "format": "jsonv2",
+            "limit": 1,
+            "addressdetails": 0,
+            "countrycodes": "br",
+            "viewbox": "-46.83,-23.35,-46.36,-24.05",
+            "bounded": 0,
+        },
+    )
+    request = urllib.request.Request(
+        f"https://nominatim.openstreetmap.org/search?{params}",
+        headers={"User-Agent": "TreeCheck MVP contato-local"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=6) as response:
+            payload = json.load(response)
+    except Exception:
+        return None
+    if not payload:
+        return None
+    result = payload[0]
     return GeocodeResponse(
         query=q,
-        lat=round(-23.55 + offset, 6),
-        lng=round(-46.63 - offset, 6),
-        label=f"{q}, Sao Paulo aproximado",
+        lat=round(float(result["lat"]), 6),
+        lng=round(float(result["lon"]), 6),
+        label=result.get("display_name", q),
+        source="nominatim_openstreetmap",
     )
 
 
@@ -243,6 +277,7 @@ def nearby_parks(lat: float, lng: float, radius_m: int) -> list[dict]:
             park["width"],
             park["height"],
             {"name": park["name"]},
+            geometry=park.get("geometry"),
         )
         for park in candidates
     ]
@@ -251,7 +286,7 @@ def nearby_parks(lat: float, lng: float, radius_m: int) -> list[dict]:
 
 def nearby_canopy(lat: float, lng: float, radius_m: int) -> list[dict]:
     return [
-        circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])
+        polygon_or_circle_feature(patch)
         for patch in nearby_items(lat, lng, radius_m, canopy_patches())
     ]
 
@@ -296,7 +331,20 @@ def point_feature(lng: float, lat: float, properties: dict) -> dict:
     }
 
 
-def rectangle_feature(lng: float, lat: float, width: float, height: float, properties: dict) -> dict:
+def rectangle_feature(
+    lng: float,
+    lat: float,
+    width: float,
+    height: float,
+    properties: dict,
+    geometry: dict | None = None,
+) -> dict:
+    if geometry:
+        return {
+            "type": "Feature",
+            "geometry": geometry,
+            "properties": properties,
+        }
     west = lng - width / 2
     east = lng + width / 2
     south = lat - height / 2
@@ -328,4 +376,15 @@ def park_feature(park: dict) -> dict:
             "distance_m": park["distance_m"],
             "source": park["source"],
         },
+        geometry=park.get("geometry"),
     )
+
+
+def polygon_or_circle_feature(patch: dict) -> dict:
+    if patch.get("geometry"):
+        return {
+            "type": "Feature",
+            "geometry": patch["geometry"],
+            "properties": {"source_id": patch.get("source_id")},
+        }
+    return circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])

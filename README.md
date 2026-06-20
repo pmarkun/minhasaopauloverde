@@ -313,6 +313,12 @@ URLs locais:
 - Backend: `http://127.0.0.1:8000`
 - Healthcheck: `http://127.0.0.1:8000/health`
 
+Geocodificacao:
+
+- O endpoint `/geocode` consulta Nominatim/OpenStreetMap para enderecos reais.
+- Se a consulta externa falhar, usa apenas os enderecos locais conhecidos como fallback.
+- O backend nao inventa coordenadas para enderecos desconhecidos; nesses casos retorna `404`.
+
 Tambem e possivel executar comandos sem entrar no shell:
 
 ```bash
@@ -358,6 +364,8 @@ Esses comandos substituem:
 - `data/processed/green_areas.json`, com fonte `geosampa_praca_largo`
 
 Depois disso, o `/score` passa a reportar a fonte GeoSampa no campo `source`.
+
+As areas verdes de `geosampa_praca_largo` preservam os poligonos reais do Shapefile para o mapa. A cobertura vegetal e usada para calcular o percentual, mas nao e desenhada como circulos no cartao compartilhavel.
 
 Por padrao, os importadores filtram o recorte piloto Paulista/Ibirapuera/Centro. Para processar Sao Paulo inteira, use `--all`:
 

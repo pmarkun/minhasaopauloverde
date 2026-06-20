@@ -21,12 +21,13 @@ def main() -> None:
     parser.add_argument("--north", type=float, default=-23.545)
     parser.add_argument("--east", type=float, default=-46.625)
     parser.add_argument("--all", action="store_true", help="Importa Sao Paulo inteira, sem filtrar pelo bbox piloto.")
+    parser.add_argument("--include-geometry", action="store_true", help="Inclui poligonos no JSON; aumenta muito o arquivo.")
     args = parser.parse_args()
 
     if Path(args.source).suffix.lower() in {".zip", ".shp"}:
         patches = []
         for item in iter_shapefile_records(args.source, default_epsg=31983):
-            patch = canopy_patch_from_shape_record(item)
+            patch = canopy_patch_from_shape_record(item, include_geometry=args.include_geometry)
             if patch and (args.all or in_bbox(patch["lat"], patch["lng"], args.south, args.west, args.north, args.east)):
                 patches.append(patch)
     else:

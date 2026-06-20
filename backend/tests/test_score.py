@@ -12,12 +12,19 @@ def test_health() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_geocode_known_address() -> None:
+def test_geocode_known_address(monkeypatch) -> None:
+    monkeypatch.setattr("treecheck_api.main.geocode_nominatim", lambda q: None)
     response = client.get("/geocode?q=Avenida%20Paulista")
     assert response.status_code == 200
     body = response.json()
     assert body["label"] == "Avenida Paulista, Sao Paulo"
     assert body["source"] == "sample_local"
+
+
+def test_geocode_unknown_address_returns_404(monkeypatch) -> None:
+    monkeypatch.setattr("treecheck_api.main.geocode_nominatim", lambda q: None)
+    response = client.get("/geocode?q=Endereco%20Inexistente%20XYZ")
+    assert response.status_code == 404
 
 
 def test_indicators_contract() -> None:

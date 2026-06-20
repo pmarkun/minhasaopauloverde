@@ -50,7 +50,14 @@ def test_canopy_patch_from_polygon_feature() -> None:
 def test_green_area_from_shape_record() -> None:
     class Shape:
         bbox = [328170.0, 7393841.0, 328220.0, 7393915.0]
-        points = [(328170.0, 7393841.0)]
+        parts = [0]
+        points = [
+            (328170.0, 7393841.0),
+            (328220.0, 7393841.0),
+            (328220.0, 7393915.0),
+            (328170.0, 7393915.0),
+            (328170.0, 7393841.0),
+        ]
 
     class Transformer:
         def transform(self, x: float, y: float) -> tuple[float, float]:

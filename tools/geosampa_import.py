@@ -99,7 +99,28 @@ def tree_point_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def canopy_patch_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
+def shape_geometry_geojson(item: dict[str, Any]) -> dict[str, Any] | None:
+    shape = item["shape"]
+    if not shape.points:
+        return None
+    transformer = item["transformer"]
+    parts = list(shape.parts) + [len(shape.points)]
+    rings = []
+    for start, end in zip(parts, parts[1:]):
+        ring = []
+        for x, y in shape.points[start:end]:
+            lng, lat = transformer.transform(x, y)
+            ring.append([round(lng, 7), round(lat, 7)])
+        if ring and ring[0] != ring[-1]:
+            ring.append(ring[0])
+        if len(ring) >= 4:
+            rings.append(ring)
+    if not rings:
+        return None
+    return {"type": "Polygon", "coordinates": rings}
+
+
+def canopy_patch_from_shape_record(item: dict[str, Any], include_geometry: bool = False) -> dict[str, Any] | None:
     shape = item["shape"]
     if not shape.points:
         return None
@@ -108,12 +129,15 @@ def canopy_patch_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | Non
     center_y = (min_y + max_y) / 2
     lng, lat = item["transformer"].transform(center_x, center_y)
     radius = max(8, min(180, round(math.sqrt((max_x - min_x) ** 2 + (max_y - min_y) ** 2) / 2)))
-    return {
+    patch = {
         "lat": round(lat, 7),
         "lng": round(lng, 7),
         "radius_m": radius,
         "source_id": item["index"],
     }
+    if include_geometry:
+        patch["geometry"] = shape_geometry_geojson(item)
+    return patch
 
 
 def green_area_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
@@ -141,6 +165,7 @@ def green_area_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
         "width": max(0.0001, abs(east - west)),
         "height": max(0.0001, abs(north - south)),
         "entrances": [(round(center_lat, 7), round(center_lng, 7))],
+        "geometry": shape_geometry_geojson(item),
         "source_id": properties.get("cd_identif") or item["index"],
     }
 
