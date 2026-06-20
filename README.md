@@ -336,6 +336,20 @@ nix develop --command python tools/fetch_osm_tree_layers.py
 
 Isso gera `data/processed/tree_points.json` e `data/processed/canopy_patches.json`. A camada de cobertura OSM e apenas um proxy para o MVP; MapBiomas/GeoSampa continuam sendo as fontes alvo para producao.
 
+Para usar GeoSampa em Sao Paulo, exporte as camadas como GeoJSON pelo portal ou use uma URL GeoJSON acessivel:
+
+```bash
+nix develop --command python tools/import_geosampa_canopy.py caminho/para/cobertura_vegetal.geojson
+nix develop --command python tools/import_geosampa_trees.py caminho/para/arborizacao_viaria.geojson
+```
+
+Esses comandos substituem:
+
+- `data/processed/canopy_patches.json`, com fonte `geosampa_cobertura_vegetal`
+- `data/processed/tree_points.json`, com fonte `geosampa_arborizacao_viaria`
+
+Depois disso, o `/score` passa a reportar a fonte GeoSampa no campo `source`.
+
 ## API inicial
 
 Endpoint:
