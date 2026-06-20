@@ -126,6 +126,16 @@ Importante:
 
 ## Dados
 
+O MVP atual usa um dataset local pequeno de amostra para Sao Paulo, versionado no backend. Ele permite validar o fluxo completo sem depender de downloads externos:
+
+- enderecos conhecidos para geocodificacao local
+- areas verdes publicas de exemplo
+- manchas de cobertura arborea de exemplo
+- pontos de arvores de exemplo
+- distancia caminhavel estimada por fator sobre distancia direta
+
+As proximas etapas substituem esse dataset por ingestao OSM, MapBiomas e GeoSampa.
+
 ### Nacional
 
 #### MapBiomas

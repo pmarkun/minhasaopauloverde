@@ -17,7 +17,7 @@ def test_geocode_known_address() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["label"] == "Avenida Paulista, Sao Paulo"
-    assert body["source"] == "mock"
+    assert body["source"] == "sample_local"
 
 
 def test_score_contract() -> None:
@@ -29,6 +29,8 @@ def test_score_contract() -> None:
     assert 0 <= body["score"]["passed"] <= 3
     assert "canopy_100m" in body["criteria"]["canopy"]
     assert "distance_m" in body["criteria"]["park_access"]
+    assert body["criteria"]["canopy"]["source"] == "sample_local"
+    assert body["criteria"]["park_access"]["source"] == "sample_local_walking_estimate"
 
 
 def test_map_data_contract() -> None:

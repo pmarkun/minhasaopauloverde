@@ -1,10 +1,12 @@
 from enum import Enum
-from math import asin, atan2, cos, sin
 from typing import Annotated
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+from treecheck_api.sample_data import CANOPY_PATCHES, GREEN_AREAS, SAMPLE_ADDRESSES, TREE_POINTS
+from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
 
 
 class TreeVisibility(str, Enum):
@@ -30,14 +32,14 @@ class CanopyCriterion(BaseModel):
     canopy_100m: float
     canopy_300m: float
     target: int = 30
-    source: str = "mock"
+    source: str = "sample_local"
 
 
 class ParkAccessCriterion(BaseModel):
     status: str
     distance_m: int
     target_m: int = 300
-    source: str = "mock"
+    source: str = "sample_local_walking_estimate"
 
 
 class ScoreCriteria(BaseModel):
@@ -70,7 +72,7 @@ class GeocodeResponse(BaseModel):
     lat: float
     lng: float
     label: str
-    source: str = "mock"
+    source: str = "sample_local"
 
 
 app = FastAPI(title="TreeCheck API", version="0.1.0")
@@ -92,12 +94,7 @@ def health() -> dict[str, str]:
 @app.get("/geocode", response_model=GeocodeResponse)
 def geocode(q: Annotated[str, Query(min_length=3)]) -> GeocodeResponse:
     normalized = q.strip().lower()
-    known = {
-        "avenida paulista": (-23.5614, -46.6559, "Avenida Paulista, Sao Paulo"),
-        "ibirapuera": (-23.5874, -46.6576, "Parque Ibirapuera, Sao Paulo"),
-        "se": (-23.5503, -46.6339, "Se, Sao Paulo"),
-    }
-    for key, (lat, lng, label) in known.items():
+    for key, (lat, lng, label) in SAMPLE_ADDRESSES.items():
         if key in normalized:
             return GeocodeResponse(query=q, lat=lat, lng=lng, label=label)
 
@@ -116,9 +113,9 @@ def score(
     lng: Annotated[float, Query(ge=-180, le=180)],
     trees_visible: TreeVisibility = TreeVisibility.unknown,
 ) -> ScoreResponse:
-    canopy_100m = mock_canopy(lat, lng, radius_m=100)
-    canopy_300m = mock_canopy(lat, lng, radius_m=300)
-    park_distance = mock_park_distance(lat, lng)
+    canopy_100m = estimate_canopy_percent(lat, lng, radius_m=100, patches=CANOPY_PATCHES)
+    canopy_300m = estimate_canopy_percent(lat, lng, radius_m=300, patches=CANOPY_PATCHES)
+    park_distance = nearest_green_area_distance(lat, lng)
 
     trees_passed = trees_visible == TreeVisibility.yes
     canopy_passed = canopy_300m >= 30
@@ -157,26 +154,9 @@ def map_data(
 ) -> MapDataResponse:
     return MapDataResponse(
         user_buffer_300m=geojson_feature_collection([circle_polygon(lng, lat, 300)]),
-        parks=geojson_feature_collection(
-            [
-                rectangle_feature(lng + 0.0045, lat + 0.0028, 0.0035, 0.0022, {"name": "Praca Verde"}),
-                rectangle_feature(lng - 0.0052, lat - 0.003, 0.004, 0.0025, {"name": "Parque Local"}),
-            ],
-        ),
-        canopy=geojson_feature_collection(
-            [
-                rectangle_feature(lng - 0.002, lat + 0.002, 0.0025, 0.0012, {"canopy": "alta"}),
-                rectangle_feature(lng + 0.002, lat - 0.0018, 0.003, 0.0015, {"canopy": "media"}),
-            ],
-        ),
-        trees=geojson_feature_collection(
-            [
-                point_feature(lng + 0.001, lat + 0.0015, {"species": "mock"}),
-                point_feature(lng - 0.0012, lat + 0.0006, {"species": "mock"}),
-                point_feature(lng + 0.0028, lat - 0.001, {"species": "mock"}),
-                point_feature(lng - 0.0024, lat - 0.0014, {"species": "mock"}),
-            ],
-        ),
+        parks=geojson_feature_collection(nearby_parks(lat, lng)),
+        canopy=geojson_feature_collection(nearby_canopy(lat, lng)),
+        trees=geojson_feature_collection(nearby_trees(lat, lng)),
     )
 
 
@@ -186,14 +166,57 @@ def status_for_bool(passed: bool, known: bool = True) -> str:
     return "passed" if passed else "failed"
 
 
-def mock_canopy(lat: float, lng: float, radius_m: int) -> float:
-    seed = abs((lat * 137.0) + (lng * 71.0) + radius_m)
-    return round(12 + (seed % 31), 1)
+def nearest_green_area_distance(lat: float, lng: float) -> int:
+    return min(
+        walking_distance_m(lat, lng, park["entrances"])
+        for park in GREEN_AREAS
+    )
 
 
-def mock_park_distance(lat: float, lng: float) -> int:
-    seed = abs((lat * 1000.0) - (lng * 900.0))
-    return int(120 + (seed % 520))
+def nearby_parks(lat: float, lng: float) -> list[dict]:
+    parks = [
+        rectangle_feature(
+            park["lng"],
+            park["lat"],
+            park["width"],
+            park["height"],
+            {"name": park["name"]},
+        )
+        for park in GREEN_AREAS
+        if haversine_m(lat, lng, park["lat"], park["lng"]) <= 2500
+    ]
+    if parks:
+        return parks
+    nearest = min(GREEN_AREAS, key=lambda park: haversine_m(lat, lng, park["lat"], park["lng"]))
+    return [
+        rectangle_feature(
+            nearest["lng"],
+            nearest["lat"],
+            nearest["width"],
+            nearest["height"],
+            {"name": nearest["name"]},
+        ),
+    ]
+
+
+def nearby_canopy(lat: float, lng: float) -> list[dict]:
+    return [
+        circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])
+        for patch in CANOPY_PATCHES
+        if haversine_m(lat, lng, patch["lat"], patch["lng"]) <= 2500
+    ]
+
+
+def nearby_trees(lat: float, lng: float) -> list[dict]:
+    trees = [
+        point_feature(tree["lng"], tree["lat"], {"species": tree["species"]})
+        for tree in TREE_POINTS
+        if haversine_m(lat, lng, tree["lat"], tree["lng"]) <= 2500
+    ]
+    if len(trees) >= 3:
+        return trees
+    nearest = sorted(TREE_POINTS, key=lambda tree: haversine_m(lat, lng, tree["lat"], tree["lng"]))[:3]
+    return [point_feature(tree["lng"], tree["lat"], {"species": tree["species"]}) for tree in nearest]
 
 
 def recommendations(
@@ -243,29 +266,4 @@ def rectangle_feature(lng: float, lat: float, width: float, height: float, prope
             ]],
         },
         "properties": properties,
-    }
-
-
-def circle_polygon(lng: float, lat: float, radius_m: int) -> dict:
-    points = 72
-    earth_radius = 6_371_000
-    lat_rad = lat * 3.141592653589793 / 180
-    lng_rad = lng * 3.141592653589793 / 180
-    distance = radius_m / earth_radius
-    coordinates = []
-    for index in range(points + 1):
-        bearing = (index / points) * 3.141592653589793 * 2
-        point_lat = asin(
-            sin(lat_rad) * cos(distance)
-            + cos(lat_rad) * sin(distance) * cos(bearing),
-        )
-        point_lng = lng_rad + atan2(
-            sin(bearing) * sin(distance) * cos(lat_rad),
-            cos(distance) - sin(lat_rad) * sin(point_lat),
-        )
-        coordinates.append([point_lng * 180 / 3.141592653589793, point_lat * 180 / 3.141592653589793])
-    return {
-        "type": "Feature",
-        "geometry": {"type": "Polygon", "coordinates": [coordinates]},
-        "properties": {},
     }
