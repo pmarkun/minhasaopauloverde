@@ -48,3 +48,21 @@ TREE_POINTS = [
     {"lat": -23.5865, "lng": -46.6560, "species": "sample"},
     {"lat": -23.5505, "lng": -46.6340, "species": "sample"},
 ]
+
+PILOT_TERRITORIES = [
+    {
+        "id": "paulista",
+        "name": "Paulista / Jardins",
+        "samples": [(-23.5614, -46.6559), (-23.5634, -46.6543), (-23.5597, -46.6528)],
+    },
+    {
+        "id": "ibirapuera",
+        "name": "Ibirapuera",
+        "samples": [(-23.5874, -46.6576), (-23.5868, -46.6558), (-23.5848, -46.6604)],
+    },
+    {
+        "id": "centro",
+        "name": "Centro / Se",
+        "samples": [(-23.5503, -46.6339), (-23.5510, -46.6352), (-23.5498, -46.6328)],
+    },
+]

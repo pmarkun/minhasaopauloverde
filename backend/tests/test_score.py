@@ -20,6 +20,16 @@ def test_geocode_known_address() -> None:
     assert body["source"] == "sample_local"
 
 
+def test_indicators_contract() -> None:
+    response = client.get("/indicators")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) >= 1
+    assert "green_inequality_index" in body[0]
+    assert 0 <= body[0]["pct_meets_30"] <= 100
+    assert 0 <= body[0]["pct_meets_300"] <= 100
+
+
 def test_score_contract() -> None:
     response = client.get("/score?lat=-23.55&lng=-46.63&trees_visible=yes")
     assert response.status_code == 200

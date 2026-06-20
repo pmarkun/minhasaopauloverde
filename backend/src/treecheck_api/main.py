@@ -5,7 +5,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from treecheck_api.sample_data import CANOPY_PATCHES, GREEN_AREAS, SAMPLE_ADDRESSES, TREE_POINTS
+from treecheck_api.sample_data import CANOPY_PATCHES, GREEN_AREAS, PILOT_TERRITORIES, SAMPLE_ADDRESSES, TREE_POINTS
 from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
 
 
@@ -75,6 +75,16 @@ class GeocodeResponse(BaseModel):
     source: str = "sample_local"
 
 
+class TerritoryIndicator(BaseModel):
+    id: str
+    name: str
+    canopy_mean_300m: float
+    park_distance_mean_m: int
+    pct_meets_30: float
+    pct_meets_300: float
+    green_inequality_index: float
+
+
 app = FastAPI(title="TreeCheck API", version="0.1.0")
 
 app.add_middleware(
@@ -89,6 +99,11 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/indicators", response_model=list[TerritoryIndicator])
+def indicators() -> list[TerritoryIndicator]:
+    return [territory_indicator(territory) for territory in PILOT_TERRITORIES]
 
 
 @app.get("/geocode", response_model=GeocodeResponse)
@@ -170,6 +185,29 @@ def nearest_green_area_distance(lat: float, lng: float) -> int:
     return min(
         walking_distance_m(lat, lng, park["entrances"])
         for park in GREEN_AREAS
+    )
+
+
+def territory_indicator(territory: dict) -> TerritoryIndicator:
+    samples = territory["samples"]
+    canopy_values = [
+        estimate_canopy_percent(lat, lng, radius_m=300, patches=CANOPY_PATCHES)
+        for lat, lng in samples
+    ]
+    park_distances = [nearest_green_area_distance(lat, lng) for lat, lng in samples]
+    canopy_mean = round(sum(canopy_values) / len(canopy_values), 1)
+    distance_mean = round(sum(park_distances) / len(park_distances))
+    pct_meets_30 = round(sum(value >= 30 for value in canopy_values) / len(canopy_values) * 100, 1)
+    pct_meets_300 = round(sum(value <= 300 for value in park_distances) / len(park_distances) * 100, 1)
+    deficit = ((100 - pct_meets_30) + (100 - pct_meets_300)) / 2
+    return TerritoryIndicator(
+        id=territory["id"],
+        name=territory["name"],
+        canopy_mean_300m=canopy_mean,
+        park_distance_mean_m=distance_mean,
+        pct_meets_30=pct_meets_30,
+        pct_meets_300=pct_meets_300,
+        green_inequality_index=round(deficit, 1),
     )
 
 

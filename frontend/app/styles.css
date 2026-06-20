@@ -191,6 +191,33 @@ legend {
   padding-left: 20px;
 }
 
+.indicators {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.indicatorList {
+  display: grid;
+  gap: 10px;
+}
+
+.indicatorList article {
+  background: var(--field);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.indicatorList h3,
+.indicatorList p {
+  margin-bottom: 6px;
+}
+
+.indicatorList p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .mapWrap {
   min-height: 100vh;
   position: relative;

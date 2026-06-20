@@ -31,6 +31,16 @@ type GeocodeResponse = {
   label: string;
 };
 
+type TerritoryIndicator = {
+  id: string;
+  name: string;
+  canopy_mean_300m: number;
+  park_distance_mean_m: number;
+  pct_meets_30: number;
+  pct_meets_300: number;
+  green_inequality_index: number;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_TREECHECK_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_LOCATION = { lat: -23.55, lng: -46.63 };
 
@@ -43,6 +53,7 @@ export default function Home() {
   const [treesVisible, setTreesVisible] = useState<TreeVisibility>("unknown");
   const [score, setScore] = useState<ScoreResponse | null>(null);
   const [mapData, setMapData] = useState<MapDataResponse | null>(null);
+  const [indicators, setIndicators] = useState<TerritoryIndicator[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -62,6 +73,13 @@ export default function Home() {
     });
 
     map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/indicators`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then(setIndicators)
+      .catch(() => setIndicators([]));
   }, []);
 
   useEffect(() => {
@@ -244,6 +262,22 @@ export default function Home() {
                 </ul>
               </div>
             )}
+          </section>
+        )}
+
+        {indicators.length > 0 && (
+          <section className="indicators" aria-label="Indicadores agregados">
+            <h2>Indicadores piloto</h2>
+            <div className="indicatorList">
+              {indicators.map((item) => (
+                <article key={item.id}>
+                  <h3>{item.name}</h3>
+                  <p>{item.canopy_mean_300m}% cobertura media</p>
+                  <p>{item.park_distance_mean_m} m ate area verde</p>
+                  <p>Indice desigualdade: {item.green_inequality_index}</p>
+                </article>
+              ))}
+            </div>
           </section>
         )}
       </section>
