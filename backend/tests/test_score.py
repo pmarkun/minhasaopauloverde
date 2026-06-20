@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from treecheck_api.main import app, recommendations, status_for_bool
+from treecheck_api.main import GeocodeResponse, app, recommendations, status_for_bool
 
 
 client = TestClient(app)
@@ -34,6 +34,24 @@ def test_geocode_options_returns_candidates(monkeypatch) -> None:
     body = response.json()
     assert body["query"] == "Avenida Paulista"
     assert body["options"][0]["label"] == "Avenida Paulista, Sao Paulo"
+
+
+def test_geocode_options_collapses_near_duplicate_candidates(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "treecheck_api.main.geocode_nominatim_options",
+        lambda q, limit=5: [
+            GeocodeResponse(query=q, lat=-23.561400, lng=-46.655900, label="Avenida Paulista grafia 1"),
+            GeocodeResponse(query=q, lat=-23.561430, lng=-46.655930, label="Avenida Paulista grafia 2"),
+            GeocodeResponse(query=q, lat=-23.565000, lng=-46.662000, label="Avenida Paulista outro trecho"),
+        ],
+    )
+    response = client.get("/geocode-options?q=Paulista%20sem%20sample")
+    assert response.status_code == 200
+    body = response.json()
+    assert [option["label"] for option in body["options"]] == [
+        "Avenida Paulista grafia 1",
+        "Avenida Paulista outro trecho",
+    ]
 
 
 def test_indicators_contract() -> None:

@@ -72,7 +72,7 @@ export default function Home() {
   const [mapData, setMapData] = useState<MapDataResponse | null>(null);
   const [geocodeOptions, setGeocodeOptions] = useState<GeocodeResponse[]>([]);
   const [error, setError] = useState("");
-  const [locationHint, setLocationHint] = useState("Pedimos sua localizacao para comecar pelo seu entorno.");
+  const [locationHint, setLocationHint] = useState("Pedimos sua localização para começar pelo seu entorno.");
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [mapView, setMapView] = useState<"street" | "satellite">("street");
@@ -98,6 +98,9 @@ export default function Home() {
     map.current = new maplibregl.Map(mapOptions);
 
     map.current.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
+    map.current.on("click", (event) => {
+      selectMapLocation(event.lngLat.lat, event.lngLat.lng);
+    });
   }, []);
 
   useEffect(() => {
@@ -123,23 +126,23 @@ export default function Home() {
     renderWhenStyleReady(currentMap, parsedLocation, mapData);
   }, [mapView]);
 
-  async function calculateScore() {
+  async function calculateScore(location = parsedLocation) {
     setError("");
     if (!treesVisible) {
-      setError("Responda sobre as 3 arvores da janela para calcular.");
+      setError("Responda sobre as 3 árvores da janela para calcular.");
       return;
     }
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        lat: String(parsedLocation.lat),
-        lng: String(parsedLocation.lng),
+        lat: String(location.lat),
+        lng: String(location.lng),
         trees_visible: treesVisible,
       });
       const response = await fetch(`${API_BASE}/score?${params}`);
-      if (!response.ok) throw new Error("Nao foi possivel calcular o score.");
+      if (!response.ok) throw new Error("Não foi possível calcular o score.");
       setScore(await response.json());
-      await loadMapData();
+      await loadMapData(location);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     } finally {
@@ -147,44 +150,61 @@ export default function Home() {
     }
   }
 
-  async function loadMapData() {
+  async function loadMapData(location = parsedLocation) {
     const params = new URLSearchParams({
-      lat: String(parsedLocation.lat),
-      lng: String(parsedLocation.lng),
+      lat: String(location.lat),
+      lng: String(location.lng),
       radius_m: "300",
     });
     const response = await fetch(`${API_BASE}/map-data?${params}`);
-    if (!response.ok) throw new Error("Nao foi possivel carregar o mapa do entorno.");
+    if (!response.ok) throw new Error("Não foi possível carregar o mapa do entorno.");
     setMapData(await response.json());
   }
 
-  async function geocodeAddress() {
+  async function geocodeAddress(options: { calculateAfterMatch?: boolean } = {}) {
     setError("");
     setGeocodeOptions([]);
     try {
       const params = new URLSearchParams({ q: address });
       const response = await fetch(`${API_BASE}/geocode-options?${params}`);
-      if (!response.ok) throw new Error("Endereco nao encontrado.");
+      if (!response.ok) throw new Error("Endereço não encontrado.");
       const result: GeocodeOptionsResponse = await response.json();
       if (result.options.length === 1) {
-        selectGeocodeOption(result.options[0]);
+        const location = selectGeocodeOption(result.options[0]);
+        if (options.calculateAfterMatch && treesVisible) await calculateScore(location);
         return;
       }
       setGeocodeOptions(result.options);
-      setLocationHint("Escolha o endereco correto na lista.");
+      setLocationHint("Escolha o endereço correto na lista.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     }
   }
 
   function selectGeocodeOption(option: GeocodeResponse) {
+    const location = { lat: option.lat, lng: option.lng };
     setLat(option.lat.toFixed(6));
     setLng(option.lng.toFixed(6));
     setAddress(option.label);
     setGeocodeOptions([]);
     setScore(null);
     setMapData(null);
-    setLocationHint("Endereco escolhido. Agora pode calcular seu entorno.");
+    setLocationHint("Endereço escolhido. Agora pode calcular seu entorno.");
+    return location;
+  }
+
+  function selectMapLocation(nextLat: number, nextLng: number) {
+    setLat(nextLat.toFixed(6));
+    setLng(nextLng.toFixed(6));
+    setAddress("Ponto escolhido no mapa");
+    clearResult();
+    setLocationHint("Ponto escolhido no mapa. Agora pode calcular esse entorno.");
+  }
+
+  function clearResult() {
+    setScore(null);
+    setMapData(null);
+    setGeocodeOptions([]);
   }
 
   async function sharePng() {
@@ -200,7 +220,7 @@ export default function Home() {
       if (shareNavigator.share && (!shareNavigator.canShare || shareNavigator.canShare({ files: [file] }))) {
         await shareNavigator.share({
           files: [file],
-          title: "Minha Sao Paulo Verde",
+          title: "Minha São Paulo Verde",
           text: "Olha quanta natureza existe no entorno da minha casa.",
         });
       } else {
@@ -208,7 +228,7 @@ export default function Home() {
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
-      setError(err instanceof Error ? err.message : "Nao foi possivel compartilhar.");
+      setError(err instanceof Error ? err.message : "Não foi possível compartilhar.");
     } finally {
       setExporting(false);
     }
@@ -217,18 +237,19 @@ export default function Home() {
   function requestGps(isInitial = false) {
     setError("");
     if (!navigator.geolocation) {
-      setLocationHint("GPS indisponivel neste navegador. Busque pelo endereco.");
+      setLocationHint("GPS indisponível neste navegador. Busque pelo endereço.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setLat(position.coords.latitude.toFixed(6));
         setLng(position.coords.longitude.toFixed(6));
-        setLocationHint("Usando sua localizacao atual. Voce tambem pode buscar outro endereco.");
+        clearResult();
+        setLocationHint("Usando sua localização atual. Você também pode buscar outro endereço.");
       },
       () => {
-        setLocationHint("Nao conseguimos usar sua localizacao. Busque pelo endereco.");
-        if (!isInitial) setError("Nao foi possivel obter a localizacao.");
+        setLocationHint("Não conseguimos usar sua localização. Busque pelo endereço.");
+        if (!isInitial) setError("Não foi possível obter a localização.");
       },
       { enableHighAccuracy: true, timeout: 10000 },
     );
@@ -237,7 +258,7 @@ export default function Home() {
   return (
     <main className="pageShell">
       <section className="introPanel">
-        <p className="eyebrow">Minha Sao Paulo Verde</p>
+        <p className="eyebrow">Minha São Paulo Verde</p>
         <h1>Quanto verde tem perto da sua casa?</h1>
         <p className="intro">
           Cecil Konijnendijk, especialista holandês em arborização urbana, criou uma regra simples para
@@ -264,7 +285,7 @@ export default function Home() {
           <div className="segmented twoChoices">
             {[
               ["yes", "Sim :)"],
-              ["no", "Nao :("],
+              ["no", "Não :("],
             ].map(([value, label]) => (
               <button
                 className={treesVisible === value ? "active" : ""}
@@ -280,12 +301,25 @@ export default function Home() {
 
         <div className="formStack">
           <label>
-            Seu endereco em Sao Paulo
-            <input value={address} onChange={(event) => setAddress(event.target.value)} />
+            Seu endereço em São Paulo
+            <input
+              value={address}
+              onChange={(event) => {
+                setAddress(event.target.value);
+                clearResult();
+                setLocationHint("Digite e aperte Enter para procurar o endereço.");
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void geocodeAddress({ calculateAfterMatch: true });
+                }
+              }}
+            />
           </label>
           <p className="locationHint">{locationHint}</p>
           {geocodeOptions.length > 0 && (
-            <div className="addressOptions" aria-label="Opcoes de endereco">
+            <div className="addressOptions" aria-label="Opções de endereço">
               {geocodeOptions.map((option) => (
                 <button
                   key={`${option.lat}-${option.lng}-${option.label}`}
@@ -298,24 +332,24 @@ export default function Home() {
             </div>
           )}
           <div className="buttonRow">
-            <button className="secondary" onClick={geocodeAddress} type="button">
+            <button className="secondary" onClick={() => void geocodeAddress()} type="button">
               Encontrar
             </button>
           </div>
         </div>
 
-        <button className="primary" disabled={loading} onClick={calculateScore} type="button">
+        <button className="primary" disabled={loading} onClick={() => void calculateScore()} type="button">
           {loading ? "Calculando..." : "Calcular"}
         </button>
 
         {error && <p className="error">{error}</p>}
       </section>
 
-      <section className="shareCard" aria-label="Cartao de resultado">
+      <section className="shareCard" aria-label="Cartão de resultado">
         <div className="cardHeader">
           <div>
-            <p className="eyebrow">Minha Sao Paulo Verde</p>
-            <h2>{score ? scoreTierMessage(score.score.passed) : "Seu mapa de vizinhanca"}</h2>
+            <p className="eyebrow">Minha São Paulo Verde</p>
+            <h2>{score ? scoreTierMessage(score.score.passed) : "Seu mapa de vizinhança"}</h2>
           </div>
           <div className="scoreBadge">{score ? `${score.score.passed}/3` : "3-30-300"}</div>
         </div>
@@ -331,24 +365,24 @@ export default function Home() {
               onClick={() => setMapView("satellite")}
               type="button"
             >
-              Satelite
+              Satélite
             </button>
           </div>
-          <div className="mapCaption">Seu entorno em 300 m</div>
+          <div className="mapCaption">Clique no mapa para escolher um ponto</div>
         </div>
 
         {score ? (
           <>
             <div className="kpiGrid">
-              <Metric label="Janela com 3 arvores" value={labelStatus(score.criteria.trees_visible.status)} />
+              <Metric label="Janela com 3 árvores" value={labelStatus(score.criteria.trees_visible.status)} />
               <Metric label="Verde no entorno" value={`${score.criteria.canopy.canopy_300m}%`} />
-              <Metric label="Praca mais perto" value={`${score.criteria.park_access.distance_m} m`} />
+              <Metric label="Praça mais perto" value={`${score.criteria.park_access.distance_m} m`} />
             </div>
 
             <div className="nearestPark">
-              <span>Area verde mais proxima</span>
+              <span>Área verde mais próxima</span>
               <strong>{score.criteria.park_access.name}</strong>
-              <small>Distancia estimada. O caminho real pode variar.</small>
+              <small>Distância estimada. O caminho real pode variar.</small>
             </div>
 
             <div className="actionRow">
@@ -358,13 +392,11 @@ export default function Home() {
             </div>
           </>
         ) : (
-          <div className="emptyState">
-            Busque seu endereco, responda sobre a vista da janela e veja o mapa do seu entorno.
-          </div>
+          <div className="emptyState">Busque seu endereço, clique no mapa ou responda pela sua localização.</div>
         )}
 
         <footer className="sourceLine">
-          Dados: GeoSampa. Distancia estimada. <a href="/metodologia">Como calculamos?</a>
+          Dados: GeoSampa. Distância estimada. <a href="/metodologia">Como calculamos?</a>
         </footer>
       </section>
     </main>
@@ -480,13 +512,13 @@ function upsertCircleLayer(
 
 function labelStatus(status: string) {
   if (status === "passed") return "atendido";
-  if (status === "failed") return "nao";
-  return "nao sei";
+  if (status === "failed") return "não";
+  return "não sei";
 }
 
 function scoreTierMessage(passed: number) {
-  if (passed >= 3) return "Seu entorno esta respirando verde";
-  if (passed === 2) return "Quase la: o verde ja aparece";
+  if (passed >= 3) return "Seu entorno está respirando verde";
+  if (passed === 2) return "Quase lá: o verde já aparece";
   if (passed === 1) return "Tem verde, mas ainda falta perto";
   return "Seu entorno precisa de mais natureza";
 }
@@ -515,7 +547,7 @@ async function buildShareBlob(
   canvas.width = SHARE_WIDTH;
   canvas.height = SHARE_HEIGHT;
   const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas indisponivel.");
+  if (!ctx) throw new Error("Canvas indisponível.");
 
   ctx.fillStyle = "#f4f0e6";
   ctx.fillRect(0, 0, SHARE_WIDTH, SHARE_HEIGHT);
@@ -524,22 +556,22 @@ async function buildShareBlob(
 
   ctx.fillStyle = "#0f3d2b";
   ctx.font = "700 42px Arial";
-  ctx.fillText("Minha Sao Paulo Verde", 120, 155);
+  ctx.fillText("Minha São Paulo Verde", 120, 155);
   ctx.font = "700 86px Arial";
   ctx.fillText(`${score.score.passed}/3`, 120, 255);
   ctx.font = "700 44px Arial";
   ctx.fillText("sinais de verde no entorno", 300, 230);
 
-  drawMetric(ctx, "Janela com 3 arvores", labelStatus(score.criteria.trees_visible.status), 120, 345);
+  drawMetric(ctx, "Janela com 3 árvores", labelStatus(score.criteria.trees_visible.status), 120, 345);
   drawMetric(ctx, "Verde no entorno de 300 m", `${score.criteria.canopy.canopy_300m}%`, 120, 465);
-  drawMetric(ctx, "Area verde mais proxima", `${score.criteria.park_access.distance_m} m`, 120, 585);
+  drawMetric(ctx, "Área verde mais próxima", `${score.criteria.park_access.distance_m} m`, 120, 585);
 
   ctx.fillStyle = "#17392b";
   ctx.font = "700 34px Arial";
   ctx.fillText(score.criteria.park_access.name.slice(0, 42), 120, 695);
   ctx.fillStyle = "#607067";
   ctx.font = "26px Arial";
-  ctx.fillText("Distancia estimada. O caminho real pode variar.", 120, 735);
+  ctx.fillText("Distância estimada. O caminho real pode variar.", 120, 735);
 
   drawShareMap(ctx, data, location, 120, 790, 840, 420);
 

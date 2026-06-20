@@ -3,7 +3,9 @@ from enum import Enum
 import json
 import os
 from pathlib import Path
+import re
 from typing import Annotated
+import unicodedata
 import urllib.parse
 import urllib.request
 import zipfile
@@ -26,6 +28,8 @@ from treecheck_api.data_repository import (
     tree_points_near,
 )
 from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
+
+GEOCODE_OPTION_MIN_DISTANCE_M = 100
 
 
 class TreeVisibility(str, Enum):
@@ -167,19 +171,25 @@ def geocode_options(q: Annotated[str, Query(min_length=3)]) -> GeocodeOptionsRes
 
 def geocode_options_for_query(q: str) -> list[GeocodeResponse]:
     options = geocode_nominatim_options(q)
-    normalized = q.strip().lower()
+    normalized = normalize_search_text(q)
     for key, (lat, lng, label) in sample_addresses().items():
-        if key in normalized:
+        sample_key = normalize_search_text(key)
+        if re.search(rf"\b{re.escape(sample_key)}\b", normalized):
             options.append(GeocodeResponse(query=q, lat=lat, lng=lng, label=label))
-    seen = set()
-    unique = []
+    unique: list[GeocodeResponse] = []
     for option in options:
-        marker = (round(option.lat, 5), round(option.lng, 5), option.label)
-        if marker in seen:
+        if any(
+            haversine_m(option.lat, option.lng, existing.lat, existing.lng) < GEOCODE_OPTION_MIN_DISTANCE_M
+            for existing in unique
+        ):
             continue
-        seen.add(marker)
         unique.append(option)
     return unique[:5]
+
+
+def normalize_search_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value.strip().lower())
+    return "".join(char for char in normalized if not unicodedata.combining(char))
 
 
 def geocode_nominatim(q: str) -> GeocodeResponse | None:

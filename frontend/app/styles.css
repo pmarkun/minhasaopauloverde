@@ -339,6 +339,7 @@ legend {
 
 .map {
   aspect-ratio: 1 / 1;
+  cursor: crosshair;
   min-height: 320px;
   width: 100%;
 }
