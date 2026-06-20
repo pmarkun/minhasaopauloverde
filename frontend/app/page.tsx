@@ -34,12 +34,28 @@ type GeocodeResponse = {
 
 const API_BASE = process.env.NEXT_PUBLIC_TREECHECK_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_LOCATION = { lat: -23.5614, lng: -46.6559 };
+const STREET_STYLE = "https://tiles.openfreemap.org/styles/liberty";
+const SATELLITE_STYLE: maplibregl.StyleSpecification = {
+  version: 8,
+  sources: {
+    satellite: {
+      type: "raster",
+      tiles: [
+        "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      ],
+      tileSize: 256,
+      attribution: "Imagery: Esri",
+    },
+  },
+  layers: [{ id: "satellite", type: "raster", source: "satellite" }],
+};
 const SHARE_WIDTH = 1080;
 const SHARE_HEIGHT = 1440;
 
 export default function Home() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const activeMapView = useRef<"street" | "satellite">("street");
   const [address, setAddress] = useState("Avenida Paulista");
   const [lat, setLat] = useState(String(DEFAULT_LOCATION.lat));
   const [lng, setLng] = useState(String(DEFAULT_LOCATION.lng));
@@ -49,6 +65,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [mapView, setMapView] = useState<"street" | "satellite">("street");
 
   const parsedLocation = useMemo(
     () => ({ lat: Number(lat), lng: Number(lng) }),
@@ -60,7 +77,7 @@ export default function Home() {
 
     const mapOptions = {
       container: mapContainer.current,
-      style: "https://tiles.openfreemap.org/styles/liberty",
+      style: STREET_STYLE,
       center: [DEFAULT_LOCATION.lng, DEFAULT_LOCATION.lat],
       zoom: 15.8,
       interactive: true,
@@ -78,21 +95,19 @@ export default function Home() {
     if (!currentMap || !Number.isFinite(parsedLocation.lat) || !Number.isFinite(parsedLocation.lng)) return;
 
     currentMap.flyTo({ center: [parsedLocation.lng, parsedLocation.lat], zoom: 15.8, duration: 700 });
-    const point = pointFeature(parsedLocation.lng, parsedLocation.lat);
-
-    const upsertLayers = () => {
-      upsertCircleLayer(currentMap, "home-point", geojsonFeatureCollection([point]), {
-        color: "#10231d",
-        radius: 7,
-        strokeColor: "#ffffff",
-        strokeWidth: 3,
-      });
-      if (mapData) renderMapData(currentMap, mapData);
-    };
-
-    if (currentMap.isStyleLoaded()) upsertLayers();
-    currentMap.once("load", upsertLayers);
+    if (currentMap.isStyleLoaded()) renderCurrentLocation(currentMap, parsedLocation, mapData);
+    currentMap.once("load", () => renderCurrentLocation(currentMap, parsedLocation, mapData));
   }, [mapData, parsedLocation]);
+
+  useEffect(() => {
+    const currentMap = map.current;
+    if (!currentMap) return;
+    if (activeMapView.current === mapView) return;
+
+    activeMapView.current = mapView;
+    currentMap.setStyle(mapView === "satellite" ? SATELLITE_STYLE : STREET_STYLE);
+    renderWhenStyleReady(currentMap, parsedLocation, mapData);
+  }, [mapView]);
 
   async function calculateScore() {
     setError("");
@@ -174,7 +189,7 @@ export default function Home() {
     setExporting(true);
     try {
       const blob = await buildShareBlob(score, map.current);
-      const file = new File([blob], "treecheck.png", { type: "image/png" });
+      const file = new File([blob], "minha-sao-paulo-verde.png", { type: "image/png" });
       const shareNavigator = navigator as Navigator & {
         canShare?: (data: ShareData) => boolean;
         share?: (data: ShareData) => Promise<void>;
@@ -182,8 +197,8 @@ export default function Home() {
       if (shareNavigator.share && (!shareNavigator.canShare || shareNavigator.canShare({ files: [file] }))) {
         await shareNavigator.share({
           files: [file],
-          title: "Meu TreeCheck 3-30-300",
-          text: "Veja meu acesso a infraestrutura verde urbana.",
+          title: "Minha Sao Paulo Verde",
+          text: "Olha quanta natureza existe no entorno da minha casa.",
         });
       } else {
         triggerDownload(blob);
@@ -199,15 +214,15 @@ export default function Home() {
   return (
     <main className="pageShell">
       <section className="introPanel">
-        <p className="eyebrow">TreeCheck Brasil</p>
-        <h1>Como esta o verde no entorno da sua casa?</h1>
+        <p className="eyebrow">Minha Sao Paulo Verde</p>
+        <h1>Quanto verde tem perto da sua casa?</h1>
         <p className="intro">
-          Calcule seu score 3-30-300 e gere um mapa pronto para compartilhar.
+          Veja seu entorno em 300 metros e gere uma imagem para cobrar, comparar e compartilhar.
         </p>
 
         <div className="formStack">
           <label>
-            Endereco
+            Seu endereco em Sao Paulo
             <input value={address} onChange={(event) => setAddress(event.target.value)} />
           </label>
           <div className="coordinateGrid">
@@ -222,7 +237,7 @@ export default function Home() {
           </div>
           <div className="buttonRow">
             <button className="secondary" onClick={geocodeAddress} type="button">
-              Buscar
+              Encontrar
             </button>
             <button className="secondary" onClick={useGps} type="button">
               Usar GPS
@@ -231,7 +246,7 @@ export default function Home() {
         </div>
 
         <fieldset>
-          <legend>Da principal janela voce ve pelo menos 3 arvores?</legend>
+          <legend>Da sua janela principal, da para ver pelo menos 3 arvores?</legend>
           <div className="segmented">
             {[
               ["yes", "Sim"],
@@ -251,7 +266,7 @@ export default function Home() {
         </fieldset>
 
         <button className="primary" disabled={loading} onClick={calculateScore} type="button">
-          {loading ? "Calculando..." : "Gerar meu mapa"}
+          {loading ? "Montando seu mapa..." : "Ver meu verde"}
         </button>
 
         {error && <p className="error">{error}</p>}
@@ -260,34 +275,46 @@ export default function Home() {
       <section className="shareCard" aria-label="Cartao de resultado">
         <div className="cardHeader">
           <div>
-            <p className="eyebrow">Meu TreeCheck</p>
-            <h2>{score ? `${score.score.passed}/${score.score.total} criterios atendidos` : "Seu mapa 3-30-300"}</h2>
+            <p className="eyebrow">Minha Sao Paulo Verde</p>
+            <h2>{score ? `${score.score.passed}/${score.score.total} sinais de verde` : "Seu mapa de vizinhanca"}</h2>
           </div>
           <div className="scoreBadge">{score ? `${score.score.passed}/3` : "3-30-300"}</div>
         </div>
 
         <div className="mapFrame">
           <div ref={mapContainer} className="map" />
-          <div className="mapCaption">Raio de 300 m do entorno informado</div>
+          <div className="mapToggle" aria-label="Tipo de mapa">
+            <button className={mapView === "street" ? "active" : ""} onClick={() => setMapView("street")} type="button">
+              Rua
+            </button>
+            <button
+              className={mapView === "satellite" ? "active" : ""}
+              onClick={() => setMapView("satellite")}
+              type="button"
+            >
+              Satelite
+            </button>
+          </div>
+          <div className="mapCaption">Seu entorno em 300 m</div>
         </div>
 
         {score ? (
           <>
             <div className="kpiGrid">
-              <Metric label="3 arvores" value={labelStatus(score.criteria.trees_visible.status)} />
-              <Metric label="Cobertura 300 m" value={`${score.criteria.canopy.canopy_300m}%`} />
-              <Metric label="Praca/parque" value={`${score.criteria.park_access.distance_m} m`} />
+              <Metric label="Janela com 3 arvores" value={labelStatus(score.criteria.trees_visible.status)} />
+              <Metric label="Verde no entorno" value={`${score.criteria.canopy.canopy_300m}%`} />
+              <Metric label="Praca mais perto" value={`${score.criteria.park_access.distance_m} m`} />
             </div>
 
             <div className="nearestPark">
-              <span>Mais proxima</span>
+              <span>Area verde mais proxima</span>
               <strong>{score.criteria.park_access.name}</strong>
-              <small>Distancia estimada ate area verde publica.</small>
+              <small>Distancia estimada. O caminho real pode variar.</small>
             </div>
 
             <div className="actionRow">
               <button className="primary" disabled={exporting} onClick={sharePng} type="button">
-                {exporting ? "Preparando..." : "Compartilhar"}
+                {exporting ? "Preparando..." : "Compartilhar imagem"}
               </button>
               <button className="secondary" disabled={exporting} onClick={downloadPng} type="button">
                 Baixar PNG
@@ -296,12 +323,12 @@ export default function Home() {
           </>
         ) : (
           <div className="emptyState">
-            Preencha os dados e gere seu resultado para ver o cartao compartilhavel.
+            Busque seu endereco, responda sobre a vista da janela e veja o mapa do seu entorno.
           </div>
         )}
 
         <footer className="sourceLine">
-          Dados: GeoSampa. Distancia: estimativa. <a href="/metodologia">Ver metodologia</a>
+          Dados: GeoSampa. Distancia estimada. <a href="/metodologia">Como calculamos?</a>
         </footer>
       </section>
     </main>
@@ -315,6 +342,33 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function renderCurrentLocation(
+  map: maplibregl.Map,
+  location: { lat: number; lng: number },
+  data: MapDataResponse | null,
+) {
+  const point = pointFeature(location.lng, location.lat);
+  upsertCircleLayer(map, "home-point", geojsonFeatureCollection([point]), {
+    color: "#17231d",
+    radius: 7,
+    strokeColor: "#ffffff",
+    strokeWidth: 3,
+  });
+  if (data) renderMapData(map, data);
+}
+
+function renderWhenStyleReady(
+  map: maplibregl.Map,
+  location: { lat: number; lng: number },
+  data: MapDataResponse | null,
+) {
+  if (map.isStyleLoaded()) {
+    renderCurrentLocation(map, location, data);
+    return;
+  }
+  map.once("idle", () => renderCurrentLocation(map, location, data));
 }
 
 function renderMapData(map: maplibregl.Map, data: MapDataResponse) {
@@ -414,29 +468,29 @@ async function buildShareBlob(score: ScoreResponse, map: maplibregl.Map | null):
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas indisponivel.");
 
-  ctx.fillStyle = "#f3f7f1";
+  ctx.fillStyle = "#f4f0e6";
   ctx.fillRect(0, 0, SHARE_WIDTH, SHARE_HEIGHT);
 
   roundRect(ctx, 70, 70, 940, 1300, 42, "#ffffff");
 
   ctx.fillStyle = "#0f3d2b";
   ctx.font = "700 42px Arial";
-  ctx.fillText("TreeCheck Brasil", 120, 155);
+  ctx.fillText("Minha Sao Paulo Verde", 120, 155);
   ctx.font = "700 86px Arial";
   ctx.fillText(`${score.score.passed}/3`, 120, 255);
   ctx.font = "700 44px Arial";
-  ctx.fillText("criterios 3-30-300 atendidos", 300, 230);
+  ctx.fillText("sinais de verde no entorno", 300, 230);
 
-  drawMetric(ctx, "3 arvores visiveis", labelStatus(score.criteria.trees_visible.status), 120, 345);
-  drawMetric(ctx, "Cobertura no raio de 300 m", `${score.criteria.canopy.canopy_300m}%`, 120, 465);
-  drawMetric(ctx, "Praca/parque mais proximo", `${score.criteria.park_access.distance_m} m`, 120, 585);
+  drawMetric(ctx, "Janela com 3 arvores", labelStatus(score.criteria.trees_visible.status), 120, 345);
+  drawMetric(ctx, "Verde no entorno de 300 m", `${score.criteria.canopy.canopy_300m}%`, 120, 465);
+  drawMetric(ctx, "Area verde mais proxima", `${score.criteria.park_access.distance_m} m`, 120, 585);
 
   ctx.fillStyle = "#17392b";
   ctx.font = "700 34px Arial";
   ctx.fillText(score.criteria.park_access.name.slice(0, 42), 120, 695);
   ctx.fillStyle = "#607067";
   ctx.font = "26px Arial";
-  ctx.fillText("Distancia estimada ate area verde publica.", 120, 735);
+  ctx.fillText("Distancia estimada. O caminho real pode variar.", 120, 735);
 
   const mapImage = await readableMapImage(map);
   if (mapImage) {
@@ -453,7 +507,7 @@ async function buildShareBlob(score: ScoreResponse, map: maplibregl.Map | null):
 
   ctx.fillStyle = "#596b61";
   ctx.font = "24px Arial";
-  ctx.fillText("Dados: GeoSampa. Distancia: estimativa. treecheck.local/metodologia", 120, 1290);
+  ctx.fillText("Dados: GeoSampa. Veja a metodologia no app.", 120, 1290);
 
   return await new Promise((resolve, reject) => {
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Falha ao criar PNG."))), "image/png");
@@ -492,7 +546,7 @@ function triggerDownload(blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "treecheck.png";
+  link.download = "minha-sao-paulo-verde.png";
   link.click();
   URL.revokeObjectURL(url);
 }

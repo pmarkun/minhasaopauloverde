@@ -3,8 +3,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "TreeCheck",
-  description: "Score 3-30-300 para acesso a infraestrutura verde urbana.",
+  title: "Minha Sao Paulo Verde",
+  description: "Veja quanta natureza existe no entorno da sua casa em Sao Paulo.",
 };
 
 export default function RootLayout({
@@ -18,4 +18,3 @@ export default function RootLayout({
     </html>
   );
 }
-

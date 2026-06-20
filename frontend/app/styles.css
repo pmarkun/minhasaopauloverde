@@ -1,13 +1,15 @@
 :root {
   color-scheme: light;
-  --ink: #10231d;
-  --muted: #5d6d64;
-  --line: #d9e5dd;
-  --panel: #ffffff;
-  --field: #f6f8f5;
-  --green: #117847;
-  --green-dark: #0c4d32;
-  --bg: #edf4ef;
+  --ink: #17231d;
+  --muted: #687466;
+  --line: #d8dfd3;
+  --panel: #fffdf7;
+  --field: #f7f4ea;
+  --green: #167847;
+  --green-dark: #0d4f32;
+  --leaf: #8fbe6b;
+  --sun: #f1c75b;
+  --bg: #f4f0e6;
   --danger: #9f1d12;
 }
 
@@ -23,8 +25,8 @@ body {
 
 body {
   background:
-    linear-gradient(180deg, rgba(237, 244, 239, 0.95), rgba(247, 249, 246, 0.98)),
-    #edf4ef;
+    radial-gradient(circle at top left, rgba(143, 190, 107, 0.28), transparent 32rem),
+    linear-gradient(180deg, #f7f3e7 0%, #edf5ec 100%);
   color: var(--ink);
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -53,7 +55,7 @@ a {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(16, 35, 29, 0.08);
+  box-shadow: 0 14px 36px rgba(23, 35, 29, 0.1);
   padding: 18px;
 }
 
@@ -61,6 +63,18 @@ a {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  position: relative;
+}
+
+.introPanel::before {
+  background: linear-gradient(90deg, var(--leaf), var(--sun), var(--green));
+  border-radius: 8px 8px 0 0;
+  content: "";
+  height: 5px;
+  left: -1px;
+  position: absolute;
+  right: -1px;
+  top: -1px;
 }
 
 .eyebrow {
@@ -164,20 +178,20 @@ legend {
 }
 
 .segmented button.active {
-  background: #ffffff;
+  background: #fffdf7;
   color: var(--green-dark);
   box-shadow: 0 1px 4px rgba(16, 35, 29, 0.12);
   font-weight: 700;
 }
 
 .primary {
-  background: var(--green);
+  background: linear-gradient(135deg, var(--green), var(--green-dark));
   color: #ffffff;
   font-weight: 700;
 }
 
 .secondary {
-  background: #dff2e7;
+  background: #e1efd4;
   color: var(--green-dark);
   font-weight: 700;
 }
@@ -200,6 +214,18 @@ legend {
 .shareCard {
   display: grid;
   gap: 16px;
+  position: relative;
+}
+
+.shareCard::before {
+  background: var(--sun);
+  border-radius: 8px 0 0 8px;
+  bottom: 18px;
+  content: "";
+  left: -1px;
+  position: absolute;
+  top: 18px;
+  width: 4px;
 }
 
 .cardHeader {
@@ -211,7 +237,7 @@ legend {
 
 .scoreBadge {
   align-items: center;
-  background: #10231d;
+  background: #17231d;
   border-radius: 8px;
   color: #ffffff;
   display: flex;
@@ -225,7 +251,7 @@ legend {
 }
 
 .mapFrame {
-  background: #dfeae2;
+  background: #dfe8dd;
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow: hidden;
@@ -239,7 +265,7 @@ legend {
 }
 
 .mapCaption {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 253, 247, 0.94);
   border-radius: 8px;
   bottom: 10px;
   color: var(--green-dark);
@@ -248,6 +274,36 @@ legend {
   left: 10px;
   padding: 8px 10px;
   position: absolute;
+}
+
+.mapToggle {
+  background: rgba(255, 253, 247, 0.94);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 4px;
+  left: 10px;
+  padding: 4px;
+  position: absolute;
+  top: 10px;
+  z-index: 2;
+}
+
+.mapToggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.mapToggle button.active {
+  background: var(--ink);
+  color: #ffffff;
 }
 
 .kpiGrid {
@@ -289,7 +345,7 @@ legend {
 
 .emptyState {
   background: var(--field);
-  border: 1px dashed #b8c8be;
+  border: 1px dashed #b9c7ad;
   border-radius: 8px;
   color: var(--muted);
   line-height: 1.45;
@@ -314,7 +370,7 @@ legend {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(16, 35, 29, 0.08);
+  box-shadow: 0 14px 36px rgba(23, 35, 29, 0.1);
   padding: 22px;
 }
 
