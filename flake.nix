@@ -22,12 +22,15 @@
         {
           default = pkgs.mkShell {
             packages = [
+              pkgs.cacert
               pkgs.nodejs_22
               pkgs.uv
               python
             ];
 
             shellHook = ''
+              export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
               export PYTHONPATH="$PWD/backend/src:$PYTHONPATH"
               echo "TreeCheck dev shell"
               echo "Backend: python -m uvicorn treecheck_api.main:app --app-dir backend/src --reload"
@@ -62,4 +65,3 @@
         });
     };
 }
-

@@ -320,6 +320,14 @@ nix develop --command pytest backend/tests
 nix develop --command npm run build --prefix frontend
 ```
 
+Para baixar areas verdes do OpenStreetMap via Overpass para o recorte piloto:
+
+```bash
+nix develop --command python tools/fetch_osm_green_areas.py
+```
+
+Isso gera `data/processed/green_areas.json`. Quando esse arquivo existe, o backend usa esses dados no criterio 300 e no mapa; caso contrario, usa o dataset local de amostra.
+
 ## API inicial
 
 Endpoint:

@@ -5,7 +5,7 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from treecheck_api.sample_data import CANOPY_PATCHES, GREEN_AREAS, PILOT_TERRITORIES, SAMPLE_ADDRESSES, TREE_POINTS
+from treecheck_api.data_repository import canopy_patches, green_areas, pilot_territories, sample_addresses, tree_points
 from treecheck_api.spatial import circle_polygon, estimate_canopy_percent, haversine_m, walking_distance_m
 
 
@@ -103,13 +103,13 @@ def health() -> dict[str, str]:
 
 @app.get("/indicators", response_model=list[TerritoryIndicator])
 def indicators() -> list[TerritoryIndicator]:
-    return [territory_indicator(territory) for territory in PILOT_TERRITORIES]
+    return [territory_indicator(territory) for territory in pilot_territories()]
 
 
 @app.get("/geocode", response_model=GeocodeResponse)
 def geocode(q: Annotated[str, Query(min_length=3)]) -> GeocodeResponse:
     normalized = q.strip().lower()
-    for key, (lat, lng, label) in SAMPLE_ADDRESSES.items():
+    for key, (lat, lng, label) in sample_addresses().items():
         if key in normalized:
             return GeocodeResponse(query=q, lat=lat, lng=lng, label=label)
 
@@ -128,8 +128,8 @@ def score(
     lng: Annotated[float, Query(ge=-180, le=180)],
     trees_visible: TreeVisibility = TreeVisibility.unknown,
 ) -> ScoreResponse:
-    canopy_100m = estimate_canopy_percent(lat, lng, radius_m=100, patches=CANOPY_PATCHES)
-    canopy_300m = estimate_canopy_percent(lat, lng, radius_m=300, patches=CANOPY_PATCHES)
+    canopy_100m = estimate_canopy_percent(lat, lng, radius_m=100, patches=canopy_patches())
+    canopy_300m = estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches())
     park_distance = nearest_green_area_distance(lat, lng)
 
     trees_passed = trees_visible == TreeVisibility.yes
@@ -184,14 +184,14 @@ def status_for_bool(passed: bool, known: bool = True) -> str:
 def nearest_green_area_distance(lat: float, lng: float) -> int:
     return min(
         walking_distance_m(lat, lng, park["entrances"])
-        for park in GREEN_AREAS
+        for park in green_areas()
     )
 
 
 def territory_indicator(territory: dict) -> TerritoryIndicator:
     samples = territory["samples"]
     canopy_values = [
-        estimate_canopy_percent(lat, lng, radius_m=300, patches=CANOPY_PATCHES)
+        estimate_canopy_percent(lat, lng, radius_m=300, patches=canopy_patches())
         for lat, lng in samples
     ]
     park_distances = [nearest_green_area_distance(lat, lng) for lat, lng in samples]
@@ -220,12 +220,12 @@ def nearby_parks(lat: float, lng: float) -> list[dict]:
             park["height"],
             {"name": park["name"]},
         )
-        for park in GREEN_AREAS
+        for park in green_areas()
         if haversine_m(lat, lng, park["lat"], park["lng"]) <= 2500
     ]
     if parks:
         return parks
-    nearest = min(GREEN_AREAS, key=lambda park: haversine_m(lat, lng, park["lat"], park["lng"]))
+    nearest = min(green_areas(), key=lambda park: haversine_m(lat, lng, park["lat"], park["lng"]))
     return [
         rectangle_feature(
             nearest["lng"],
@@ -240,7 +240,7 @@ def nearby_parks(lat: float, lng: float) -> list[dict]:
 def nearby_canopy(lat: float, lng: float) -> list[dict]:
     return [
         circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])
-        for patch in CANOPY_PATCHES
+        for patch in canopy_patches()
         if haversine_m(lat, lng, patch["lat"], patch["lng"]) <= 2500
     ]
 
@@ -248,12 +248,12 @@ def nearby_canopy(lat: float, lng: float) -> list[dict]:
 def nearby_trees(lat: float, lng: float) -> list[dict]:
     trees = [
         point_feature(tree["lng"], tree["lat"], {"species": tree["species"]})
-        for tree in TREE_POINTS
+        for tree in tree_points()
         if haversine_m(lat, lng, tree["lat"], tree["lng"]) <= 2500
     ]
     if len(trees) >= 3:
         return trees
-    nearest = sorted(TREE_POINTS, key=lambda tree: haversine_m(lat, lng, tree["lat"], tree["lng"]))[:3]
+    nearest = sorted(tree_points(), key=lambda tree: haversine_m(lat, lng, tree["lat"], tree["lng"]))[:3]
     return [point_feature(tree["lng"], tree["lat"], {"species": tree["species"]}) for tree in nearest]
 
 
