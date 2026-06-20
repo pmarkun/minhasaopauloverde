@@ -65,6 +65,14 @@ class MapDataResponse(BaseModel):
     trees: dict
 
 
+class GeocodeResponse(BaseModel):
+    query: str
+    lat: float
+    lng: float
+    label: str
+    source: str = "mock"
+
+
 app = FastAPI(title="TreeCheck API", version="0.1.0")
 
 app.add_middleware(
@@ -79,6 +87,27 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/geocode", response_model=GeocodeResponse)
+def geocode(q: Annotated[str, Query(min_length=3)]) -> GeocodeResponse:
+    normalized = q.strip().lower()
+    known = {
+        "avenida paulista": (-23.5614, -46.6559, "Avenida Paulista, Sao Paulo"),
+        "ibirapuera": (-23.5874, -46.6576, "Parque Ibirapuera, Sao Paulo"),
+        "se": (-23.5503, -46.6339, "Se, Sao Paulo"),
+    }
+    for key, (lat, lng, label) in known.items():
+        if key in normalized:
+            return GeocodeResponse(query=q, lat=lat, lng=lng, label=label)
+
+    offset = (sum(ord(char) for char in normalized) % 1000) / 100000
+    return GeocodeResponse(
+        query=q,
+        lat=round(-23.55 + offset, 6),
+        lng=round(-46.63 - offset, 6),
+        label=f"{q}, Sao Paulo aproximado",
+    )
 
 
 @app.get("/score", response_model=ScoreResponse)

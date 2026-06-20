@@ -25,12 +25,19 @@ type MapDataResponse = {
   trees: FeatureCollection;
 };
 
+type GeocodeResponse = {
+  lat: number;
+  lng: number;
+  label: string;
+};
+
 const API_BASE = process.env.NEXT_PUBLIC_TREECHECK_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DEFAULT_LOCATION = { lat: -23.55, lng: -46.63 };
 
 export default function Home() {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  const [address, setAddress] = useState("Avenida Paulista");
   const [lat, setLat] = useState(String(DEFAULT_LOCATION.lat));
   const [lng, setLng] = useState(String(DEFAULT_LOCATION.lng));
   const [treesVisible, setTreesVisible] = useState<TreeVisibility>("unknown");
@@ -127,6 +134,21 @@ export default function Home() {
     setMapData(await response.json());
   }
 
+  async function geocodeAddress() {
+    setError("");
+    try {
+      const params = new URLSearchParams({ q: address });
+      const response = await fetch(`${API_BASE}/geocode?${params}`);
+      if (!response.ok) throw new Error("Endereco nao encontrado.");
+      const result: GeocodeResponse = await response.json();
+      setLat(result.lat.toFixed(6));
+      setLng(result.lng.toFixed(6));
+      setAddress(result.label);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro inesperado.");
+    }
+  }
+
   function useGps() {
     setError("");
     if (!navigator.geolocation) {
@@ -153,6 +175,10 @@ export default function Home() {
         </div>
 
         <div className="grid">
+          <label className="wide">
+            Endereco
+            <input value={address} onChange={(event) => setAddress(event.target.value)} />
+          </label>
           <label>
             Latitude
             <input value={lat} onChange={(event) => setLat(event.target.value)} inputMode="decimal" />
@@ -162,6 +188,10 @@ export default function Home() {
             <input value={lng} onChange={(event) => setLng(event.target.value)} inputMode="decimal" />
           </label>
         </div>
+
+        <button className="secondary" onClick={geocodeAddress} type="button">
+          Buscar endereco
+        </button>
 
         <button className="secondary" onClick={useGps} type="button">
           Usar GPS

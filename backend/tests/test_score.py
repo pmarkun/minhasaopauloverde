@@ -12,6 +12,14 @@ def test_health() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_geocode_known_address() -> None:
+    response = client.get("/geocode?q=Avenida%20Paulista")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["label"] == "Avenida Paulista, Sao Paulo"
+    assert body["source"] == "mock"
+
+
 def test_score_contract() -> None:
     response = client.get("/score?lat=-23.55&lng=-46.63&trees_visible=yes")
     assert response.status_code == 200

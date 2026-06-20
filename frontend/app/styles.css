@@ -98,6 +98,10 @@ label {
   gap: 6px;
 }
 
+label.wide {
+  grid-column: 1 / -1;
+}
+
 input {
   background: var(--field);
   border: 1px solid var(--line);
