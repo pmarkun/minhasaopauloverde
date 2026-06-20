@@ -1,0 +1,20 @@
+[project]
+name = "treecheck-api"
+version = "0.1.0"
+description = "FastAPI backend for TreeCheck 3-30-300 Brasil"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+]
+
+[dependency-groups]
+dev = [
+  "httpx",
+  "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
