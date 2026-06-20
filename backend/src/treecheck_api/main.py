@@ -1,11 +1,17 @@
+from contextlib import asynccontextmanager
 from enum import Enum
 import json
+import os
+from pathlib import Path
 from typing import Annotated
 import urllib.parse
 import urllib.request
+import zipfile
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from treecheck_api.data_repository import (
@@ -100,7 +106,24 @@ class TerritoryIndicator(BaseModel):
     green_inequality_index: float
 
 
-app = FastAPI(title="TreeCheck API", version="0.1.0")
+def prepare_data_volume() -> None:
+    data_dir = Path(os.environ.get("TREECHECK_DATA_DIR", "data/processed"))
+    sqlite_path = data_dir / "treecheck.sqlite"
+    zip_path = data_dir / "treecheck.sqlite.zip"
+    if sqlite_path.exists() or not zip_path.exists():
+        return
+    data_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path) as archive:
+        archive.extract("treecheck.sqlite", data_dir)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    prepare_data_volume()
+    yield
+
+
+app = FastAPI(title="TreeCheck API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -390,3 +413,21 @@ def polygon_or_circle_feature(patch: dict) -> dict:
             "properties": {"source_id": patch.get("source_id")},
         }
     return circle_polygon(patch["lng"], patch["lat"], patch["radius_m"])
+
+
+FRONTEND_OUT = Path(__file__).resolve().parents[3] / "frontend" / "out"
+
+if FRONTEND_OUT.exists():
+    app.mount("/_next", StaticFiles(directory=FRONTEND_OUT / "_next"), name="next-static")
+
+
+@app.get("/{page_path:path}", include_in_schema=False)
+def frontend_page(page_path: str) -> FileResponse:
+    if not FRONTEND_OUT.exists():
+        raise HTTPException(status_code=404, detail="Frontend nao encontrado")
+    requested = FRONTEND_OUT / page_path
+    if requested.is_dir() and (requested / "index.html").exists():
+        return FileResponse(requested / "index.html")
+    if requested.is_file():
+        return FileResponse(requested)
+    return FileResponse(FRONTEND_OUT / "index.html")

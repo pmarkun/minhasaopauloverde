@@ -404,6 +404,31 @@ Campos previstos:
 - `park_distance`: distancia caminhavel ate area verde publica acessivel
 - `score`: quantidade de criterios atendidos
 
+## Deploy Railway
+
+O deploy usa um unico servico: o FastAPI serve a API e tambem o frontend estatico exportado pelo Next.
+
+Arquivos principais:
+
+- `Dockerfile`: builda o frontend e instala o backend.
+- `railway.toml`: configura o builder Docker, healthcheck e `TREECHECK_DATA_DIR=/data`.
+- `data/processed/treecheck.sqlite`: banco operacional local, ignorado pelo git.
+- `data/processed/treecheck.sqlite.zip`: versao compactada para upload ao volume, ignorada pelo git.
+
+Fluxo esperado:
+
+```bash
+zip -j data/processed/treecheck.sqlite.zip data/processed/treecheck.sqlite
+railway init
+railway add
+railway volume add --service <service-id-ou-nome> --mount-path /data
+railway volume files upload data/processed/treecheck.sqlite.zip /treecheck.sqlite.zip --overwrite
+railway up
+railway domain
+```
+
+No boot, se `/data/treecheck.sqlite` nao existir e `/data/treecheck.sqlite.zip` existir, o app descompacta o banco no volume. Depois disso, o servico passa a usar o SQLite persistente em `/data`.
+
 ## Fases
 
 ### Fase 1: MVP nacional

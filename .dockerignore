@@ -1,0 +1,10 @@
+.git
+.next
+frontend/.next
+frontend/node_modules
+frontend/out
+data/raw
+data/processed
+__pycache__
+*.pyc
+.pytest_cache

@@ -125,6 +125,11 @@ h2 {
   grid-template-columns: 1fr 1fr;
 }
 
+.buttonRow,
+.actionRow {
+  grid-template-columns: 1fr;
+}
+
 label {
   color: var(--muted);
   display: grid;
@@ -162,6 +167,10 @@ legend {
   padding: 3px;
 }
 
+.segmented.twoChoices {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .segmented button,
 .primary,
 .secondary {
@@ -194,6 +203,13 @@ legend {
   background: #e1efd4;
   color: var(--green-dark);
   font-weight: 700;
+}
+
+.locationHint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: -2px 0 0;
 }
 
 .primary:disabled,

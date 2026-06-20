@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 
-type TreeVisibility = "yes" | "no" | "unknown";
+type TreeVisibility = "yes" | "no";
 
 type ScoreResponse = {
   location: { lat: number; lng: number };
@@ -32,7 +32,9 @@ type GeocodeResponse = {
   label: string;
 };
 
-const API_BASE = process.env.NEXT_PUBLIC_TREECHECK_API_BASE_URL ?? "http://127.0.0.1:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_TREECHECK_API_BASE_URL ??
+  (typeof window !== "undefined" && window.location.port === "3000" ? "http://127.0.0.1:8000" : "");
 const DEFAULT_LOCATION = { lat: -23.5614, lng: -46.6559 };
 const STREET_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 const SATELLITE_STYLE: maplibregl.StyleSpecification = {
@@ -59,10 +61,11 @@ export default function Home() {
   const [address, setAddress] = useState("Avenida Paulista");
   const [lat, setLat] = useState(String(DEFAULT_LOCATION.lat));
   const [lng, setLng] = useState(String(DEFAULT_LOCATION.lng));
-  const [treesVisible, setTreesVisible] = useState<TreeVisibility>("unknown");
+  const [treesVisible, setTreesVisible] = useState<TreeVisibility | null>(null);
   const [score, setScore] = useState<ScoreResponse | null>(null);
   const [mapData, setMapData] = useState<MapDataResponse | null>(null);
   const [error, setError] = useState("");
+  const [locationHint, setLocationHint] = useState("Pedimos sua localizacao para comecar pelo seu entorno.");
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [mapView, setMapView] = useState<"street" | "satellite">("street");
@@ -91,6 +94,10 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    requestGps(true);
+  }, []);
+
+  useEffect(() => {
     const currentMap = map.current;
     if (!currentMap || !Number.isFinite(parsedLocation.lat) || !Number.isFinite(parsedLocation.lng)) return;
 
@@ -111,6 +118,10 @@ export default function Home() {
 
   async function calculateScore() {
     setError("");
+    if (!treesVisible) {
+      setError("Responda sobre as 3 arvores da janela para calcular.");
+      return;
+    }
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -155,40 +166,11 @@ export default function Home() {
     }
   }
 
-  function useGps() {
-    setError("");
-    if (!navigator.geolocation) {
-      setError("GPS indisponivel neste navegador.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLat(position.coords.latitude.toFixed(6));
-        setLng(position.coords.longitude.toFixed(6));
-      },
-      () => setError("Nao foi possivel obter a localizacao."),
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
-  }
-
-  async function downloadPng() {
-    if (!score) return;
-    setExporting(true);
-    try {
-      const blob = await buildShareBlob(score, map.current);
-      triggerDownload(blob);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Nao foi possivel exportar o PNG.");
-    } finally {
-      setExporting(false);
-    }
-  }
-
   async function sharePng() {
-    if (!score) return;
+    if (!score || !mapData) return;
     setExporting(true);
     try {
-      const blob = await buildShareBlob(score, map.current);
+      const blob = await buildShareBlob(score, mapData, parsedLocation);
       const file = new File([blob], "minha-sao-paulo-verde.png", { type: "image/png" });
       const shareNavigator = navigator as Navigator & {
         canShare?: (data: ShareData) => boolean;
@@ -211,6 +193,26 @@ export default function Home() {
     }
   }
 
+  function requestGps(isInitial = false) {
+    setError("");
+    if (!navigator.geolocation) {
+      setLocationHint("GPS indisponivel neste navegador. Busque pelo endereco.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLat(position.coords.latitude.toFixed(6));
+        setLng(position.coords.longitude.toFixed(6));
+        setLocationHint("Usando sua localizacao atual. Voce tambem pode buscar outro endereco.");
+      },
+      () => {
+        setLocationHint("Nao conseguimos usar sua localizacao. Busque pelo endereco.");
+        if (!isInitial) setError("Nao foi possivel obter a localizacao.");
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
+
   return (
     <main className="pageShell">
       <section className="introPanel">
@@ -220,38 +222,12 @@ export default function Home() {
           Veja seu entorno em 300 metros e gere uma imagem para cobrar, comparar e compartilhar.
         </p>
 
-        <div className="formStack">
-          <label>
-            Seu endereco em Sao Paulo
-            <input value={address} onChange={(event) => setAddress(event.target.value)} />
-          </label>
-          <div className="coordinateGrid">
-            <label>
-              Latitude
-              <input value={lat} onChange={(event) => setLat(event.target.value)} inputMode="decimal" />
-            </label>
-            <label>
-              Longitude
-              <input value={lng} onChange={(event) => setLng(event.target.value)} inputMode="decimal" />
-            </label>
-          </div>
-          <div className="buttonRow">
-            <button className="secondary" onClick={geocodeAddress} type="button">
-              Encontrar
-            </button>
-            <button className="secondary" onClick={useGps} type="button">
-              Usar GPS
-            </button>
-          </div>
-        </div>
-
         <fieldset>
           <legend>Da sua janela principal, da para ver pelo menos 3 arvores?</legend>
-          <div className="segmented">
+          <div className="segmented twoChoices">
             {[
-              ["yes", "Sim"],
-              ["no", "Nao"],
-              ["unknown", "Nao sei"],
+              ["yes", "Sim :)"],
+              ["no", "Nao :("],
             ].map(([value, label]) => (
               <button
                 className={treesVisible === value ? "active" : ""}
@@ -265,8 +241,21 @@ export default function Home() {
           </div>
         </fieldset>
 
+        <div className="formStack">
+          <label>
+            Seu endereco em Sao Paulo
+            <input value={address} onChange={(event) => setAddress(event.target.value)} />
+          </label>
+          <p className="locationHint">{locationHint}</p>
+          <div className="buttonRow">
+            <button className="secondary" onClick={geocodeAddress} type="button">
+              Encontrar
+            </button>
+          </div>
+        </div>
+
         <button className="primary" disabled={loading} onClick={calculateScore} type="button">
-          {loading ? "Montando seu mapa..." : "Ver meu verde"}
+          {loading ? "Calculando..." : "Calcular"}
         </button>
 
         {error && <p className="error">{error}</p>}
@@ -276,7 +265,7 @@ export default function Home() {
         <div className="cardHeader">
           <div>
             <p className="eyebrow">Minha Sao Paulo Verde</p>
-            <h2>{score ? `${score.score.passed}/${score.score.total} sinais de verde` : "Seu mapa de vizinhanca"}</h2>
+            <h2>{score ? scoreTierMessage(score.score.passed) : "Seu mapa de vizinhanca"}</h2>
           </div>
           <div className="scoreBadge">{score ? `${score.score.passed}/3` : "3-30-300"}</div>
         </div>
@@ -315,9 +304,6 @@ export default function Home() {
             <div className="actionRow">
               <button className="primary" disabled={exporting} onClick={sharePng} type="button">
                 {exporting ? "Preparando..." : "Compartilhar imagem"}
-              </button>
-              <button className="secondary" disabled={exporting} onClick={downloadPng} type="button">
-                Baixar PNG
               </button>
             </div>
           </>
@@ -368,7 +354,7 @@ function renderWhenStyleReady(
     renderCurrentLocation(map, location, data);
     return;
   }
-  map.once("idle", () => renderCurrentLocation(map, location, data));
+  map.once("style.load", () => renderCurrentLocation(map, location, data));
 }
 
 function renderMapData(map: maplibregl.Map, data: MapDataResponse) {
@@ -448,6 +434,13 @@ function labelStatus(status: string) {
   return "nao sei";
 }
 
+function scoreTierMessage(passed: number) {
+  if (passed >= 3) return "Seu entorno esta respirando verde";
+  if (passed === 2) return "Quase la: o verde ja aparece";
+  if (passed === 1) return "Tem verde, mas ainda falta perto";
+  return "Seu entorno precisa de mais natureza";
+}
+
 function pointFeature(lng: number, lat: number) {
   return {
     type: "Feature" as const,
@@ -463,7 +456,11 @@ function geojsonFeatureCollection(features: GeoJSON.Feature[]): FeatureCollectio
   return { type: "FeatureCollection", features };
 }
 
-async function buildShareBlob(score: ScoreResponse, map: maplibregl.Map | null): Promise<Blob> {
+async function buildShareBlob(
+  score: ScoreResponse,
+  data: MapDataResponse,
+  location: { lat: number; lng: number },
+): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = SHARE_WIDTH;
   canvas.height = SHARE_HEIGHT;
@@ -494,18 +491,7 @@ async function buildShareBlob(score: ScoreResponse, map: maplibregl.Map | null):
   ctx.font = "26px Arial";
   ctx.fillText("Distancia estimada. O caminho real pode variar.", 120, 735);
 
-  const mapImage = await readableMapImage(map);
-  if (mapImage) {
-    ctx.drawImage(mapImage, 120, 790, 840, 420);
-  } else {
-    roundRect(ctx, 120, 790, 840, 420, 24, "#dfe9e1");
-    ctx.fillStyle = "#50675a";
-    ctx.font = "30px Arial";
-    ctx.fillText("Mapa indisponivel no export.", 180, 1000);
-  }
-  ctx.strokeStyle = "#d6e4d9";
-  ctx.lineWidth = 4;
-  ctx.strokeRect(120, 790, 840, 420);
+  drawShareMap(ctx, data, location, 120, 790, 840, 420);
 
   ctx.fillStyle = "#596b61";
   ctx.font = "24px Arial";
@@ -553,18 +539,133 @@ function triggerDownload(blob: Blob) {
   URL.revokeObjectURL(url);
 }
 
-async function readableMapImage(map: maplibregl.Map | null): Promise<HTMLImageElement | null> {
-  const mapCanvas = map?.getCanvas();
-  if (!mapCanvas) return null;
-  try {
-    const dataUrl = mapCanvas.toDataURL("image/png");
-    return await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = reject;
-      image.src = dataUrl;
+function drawShareMap(
+  ctx: CanvasRenderingContext2D,
+  data: MapDataResponse,
+  location: { lat: number; lng: number },
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const bounds = featureBounds(data.user_buffer_300m) ?? {
+    minLng: location.lng - 0.004,
+    minLat: location.lat - 0.004,
+    maxLng: location.lng + 0.004,
+    maxLat: location.lat + 0.004,
+  };
+  const project = (lng: number, lat: number) => {
+    const pad = 28;
+    const innerWidth = width - pad * 2;
+    const innerHeight = height - pad * 2;
+    const lngSpan = bounds.maxLng - bounds.minLng || 0.001;
+    const latSpan = bounds.maxLat - bounds.minLat || 0.001;
+    return {
+      x: x + pad + ((lng - bounds.minLng) / lngSpan) * innerWidth,
+      y: y + pad + ((bounds.maxLat - lat) / latSpan) * innerHeight,
+    };
+  };
+
+  roundRect(ctx, x, y, width, height, 24, "#e6efe2");
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, width, height);
+  ctx.clip();
+
+  drawFeatureCollection(ctx, data.canopy, project, "#8fbe6b", "rgba(79,143,70,0.7)", 0.9);
+  drawFeatureCollection(ctx, data.parks, project, "#35b66c", "rgba(8,122,66,0.9)", 1.5);
+  drawFeatureCollection(ctx, data.nearest_park, project, "#14b86f", "#005f38", 2.2);
+  drawFeatureCollection(ctx, data.user_buffer_300m, project, "rgba(183,240,200,0.08)", "#127044", 3);
+
+  const home = project(location.lng, location.lat);
+  ctx.fillStyle = "#17231d";
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(home.x, home.y, 10, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = "#d6e4d9";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(x, y, width, height);
+}
+
+function drawFeatureCollection(
+  ctx: CanvasRenderingContext2D,
+  collection: FeatureCollection,
+  project: (lng: number, lat: number) => { x: number; y: number },
+  fill: string,
+  stroke: string,
+  lineWidth: number,
+) {
+  for (const feature of collection.features) {
+    drawGeometry(ctx, feature.geometry, project, fill, stroke, lineWidth);
+  }
+}
+
+function drawGeometry(
+  ctx: CanvasRenderingContext2D,
+  geometry: GeoJSON.Geometry | null,
+  project: (lng: number, lat: number) => { x: number; y: number },
+  fill: string,
+  stroke: string,
+  lineWidth: number,
+) {
+  if (!geometry) return;
+  const polygons =
+    geometry.type === "Polygon"
+      ? [geometry.coordinates]
+      : geometry.type === "MultiPolygon"
+        ? geometry.coordinates
+        : [];
+  if (!polygons.length) return;
+
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = lineWidth;
+  for (const polygon of polygons) {
+    ctx.beginPath();
+    for (const ring of polygon) {
+      ring.forEach(([lng, lat], index) => {
+        const point = project(lng, lat);
+        if (index === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+    }
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function featureBounds(collection: FeatureCollection) {
+  let minLng = Infinity;
+  let minLat = Infinity;
+  let maxLng = -Infinity;
+  let maxLat = -Infinity;
+  for (const feature of collection.features) {
+    forEachCoordinate(feature.geometry, ([lng, lat]) => {
+      minLng = Math.min(minLng, lng);
+      minLat = Math.min(minLat, lat);
+      maxLng = Math.max(maxLng, lng);
+      maxLat = Math.max(maxLat, lat);
     });
-  } catch {
-    return null;
+  }
+  if (!Number.isFinite(minLng)) return null;
+  return { minLng, minLat, maxLng, maxLat };
+}
+
+function forEachCoordinate(geometry: GeoJSON.Geometry | null, visit: (coordinate: [number, number]) => void) {
+  if (!geometry) return;
+  if (geometry.type === "Point") {
+    visit(geometry.coordinates as [number, number]);
+  }
+  if (geometry.type === "Polygon") {
+    geometry.coordinates.flat().forEach((coordinate) => visit(coordinate as [number, number]));
+  }
+  if (geometry.type === "MultiPolygon") {
+    geometry.coordinates.flat(2).forEach((coordinate) => visit(coordinate as [number, number]));
   }
 }
