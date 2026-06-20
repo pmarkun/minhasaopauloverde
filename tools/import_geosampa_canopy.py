@@ -2,17 +2,40 @@ import argparse
 import json
 from pathlib import Path
 
-from geosampa_import import canopy_patch_from_feature, features, load_geojson
+from geosampa_import import (
+    canopy_patch_from_feature,
+    canopy_patch_from_shape_record,
+    features,
+    in_bbox,
+    iter_shapefile_records,
+    load_geojson,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import GeoSampa cobertura vegetal GeoJSON into TreeCheck.")
     parser.add_argument("source", help="GeoJSON file path or URL exported from GeoSampa.")
     parser.add_argument("--output", default="data/processed/canopy_patches.json")
+    parser.add_argument("--south", type=float, default=-23.595)
+    parser.add_argument("--west", type=float, default=-46.675)
+    parser.add_argument("--north", type=float, default=-23.545)
+    parser.add_argument("--east", type=float, default=-46.625)
     args = parser.parse_args()
 
-    payload = load_geojson(args.source)
-    patches = [patch for feature in features(payload) if (patch := canopy_patch_from_feature(feature))]
+    if Path(args.source).suffix.lower() in {".zip", ".shp"}:
+        patches = []
+        for item in iter_shapefile_records(args.source, default_epsg=31983):
+            patch = canopy_patch_from_shape_record(item)
+            if patch and in_bbox(patch["lat"], patch["lng"], args.south, args.west, args.north, args.east):
+                patches.append(patch)
+    else:
+        payload = load_geojson(args.source)
+        patches = [
+            patch
+            for feature in features(payload)
+            if (patch := canopy_patch_from_feature(feature))
+            and in_bbox(patch["lat"], patch["lng"], args.south, args.west, args.north, args.east)
+        ]
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(
@@ -24,4 +47,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

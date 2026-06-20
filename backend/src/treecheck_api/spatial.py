@@ -23,6 +23,13 @@ def estimate_canopy_percent(lat: float, lng: float, radius_m: int, patches: list
     hits = 0
     total = 0
     lng_meter = DEG_LAT_M * cos(radians(lat))
+    nearby_patches = [
+        patch
+        for patch in patches
+        if haversine_m(lat, lng, patch["lat"], patch["lng"]) <= radius_m + patch["radius_m"]
+    ]
+    if not nearby_patches:
+        return 0.0
     steps = range(-radius_m, radius_m + 1, step_m)
     for y_m in steps:
         for x_m in steps:
@@ -33,7 +40,7 @@ def estimate_canopy_percent(lat: float, lng: float, radius_m: int, patches: list
             point_lng = lng + x_m / lng_meter
             if any(
                 haversine_m(point_lat, point_lng, patch["lat"], patch["lng"]) <= patch["radius_m"]
-                for patch in patches
+                for patch in nearby_patches
             ):
                 hits += 1
     return round((hits / total) * 100, 1) if total else 0.0

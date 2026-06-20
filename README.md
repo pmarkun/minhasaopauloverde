@@ -343,6 +343,13 @@ nix develop --command python tools/import_geosampa_canopy.py caminho/para/cobert
 nix develop --command python tools/import_geosampa_trees.py caminho/para/arborizacao_viaria.geojson
 ```
 
+Os importadores tambem aceitam os ZIPs de Shapefile baixados do GeoSampa:
+
+```bash
+nix develop --command python tools/import_geosampa_canopy.py data/raw/SIRGAS_SHP_VEGETACAO_SIGNIFICATIVA.zip
+nix develop --command python tools/import_geosampa_trees.py data/raw/SIRGAS_SHP_arvore.zip
+```
+
 Esses comandos substituem:
 
 - `data/processed/canopy_patches.json`, com fonte `geosampa_cobertura_vegetal`

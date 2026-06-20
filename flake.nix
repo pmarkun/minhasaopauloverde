@@ -15,6 +15,8 @@
           python = pkgs.python312.withPackages (ps: [
             ps.fastapi
             ps.httpx
+            ps.pyproj
+            ps.pyshp
             ps.pytest
             ps.uvicorn
           ]);
@@ -45,6 +47,8 @@
           python = pkgs.python312.withPackages (ps: [
             ps.fastapi
             ps.httpx
+            ps.pyproj
+            ps.pyshp
             ps.pytest
             ps.uvicorn
           ]);

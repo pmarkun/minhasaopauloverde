@@ -1,8 +1,13 @@
 import json
 import math
+import tempfile
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any
+
+import pyproj
+import shapefile
 
 
 def load_geojson(source: str) -> dict[str, Any]:
@@ -11,6 +16,96 @@ def load_geojson(source: str) -> dict[str, Any]:
         with urllib.request.urlopen(request, timeout=60) as response:
             return json.load(response)
     return json.loads(Path(source).read_text(encoding="utf-8"))
+
+
+def load_shapefile_records(source: str, default_epsg: int = 31983) -> list[dict[str, Any]]:
+    source_path = Path(source)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        if source_path.suffix.lower() == ".zip":
+            zipfile.ZipFile(source_path).extractall(temp_dir)
+            shp_path = next(Path(temp_dir).rglob("*.shp"))
+        else:
+            shp_path = source_path
+        reader = shapefile.Reader(str(shp_path))
+        transformer = transformer_for(shp_path, default_epsg)
+        fields = [field[0] for field in reader.fields[1:]]
+        records = []
+        for index, shape_record in enumerate(reader.iterShapeRecords()):
+            properties = dict(zip(fields, shape_record.record))
+            records.append(
+                {
+                    "index": index,
+                    "shape": shape_record.shape,
+                    "properties": properties,
+                    "transformer": transformer,
+                },
+            )
+        return records
+
+
+def iter_shapefile_records(source: str, default_epsg: int = 31983):
+    source_path = Path(source)
+    with tempfile.TemporaryDirectory() as temp_dir:
+        if source_path.suffix.lower() == ".zip":
+            zipfile.ZipFile(source_path).extractall(temp_dir)
+            shp_path = next(Path(temp_dir).rglob("*.shp"))
+        else:
+            shp_path = source_path
+        reader = shapefile.Reader(str(shp_path))
+        transformer = transformer_for(shp_path, default_epsg)
+        fields = [field[0] for field in reader.fields[1:]]
+        for index, shape_record in enumerate(reader.iterShapeRecords()):
+            yield {
+                "index": index,
+                "shape": shape_record.shape,
+                "properties": dict(zip(fields, shape_record.record)),
+                "transformer": transformer,
+            }
+
+
+def transformer_for(shp_path: Path, default_epsg: int) -> pyproj.Transformer:
+    prj_path = shp_path.with_suffix(".prj")
+    if prj_path.exists():
+        source_crs = pyproj.CRS.from_wkt(prj_path.read_text(encoding="utf-8", errors="ignore"))
+    else:
+        source_crs = pyproj.CRS.from_epsg(default_epsg)
+    return pyproj.Transformer.from_crs(source_crs, pyproj.CRS.from_epsg(4326), always_xy=True)
+
+
+def tree_point_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
+    shape = item["shape"]
+    if not shape.points:
+        return None
+    x, y = shape.points[0]
+    lng, lat = item["transformer"].transform(x, y)
+    properties = item["properties"]
+    return {
+        "lat": round(lat, 7),
+        "lng": round(lng, 7),
+        "species": properties.get("especie") or properties.get("nome_popular") or "geosampa",
+        "source_id": item["index"],
+    }
+
+
+def canopy_patch_from_shape_record(item: dict[str, Any]) -> dict[str, Any] | None:
+    shape = item["shape"]
+    if not shape.points:
+        return None
+    min_x, min_y, max_x, max_y = shape.bbox
+    center_x = (min_x + max_x) / 2
+    center_y = (min_y + max_y) / 2
+    lng, lat = item["transformer"].transform(center_x, center_y)
+    radius = max(8, min(180, round(math.sqrt((max_x - min_x) ** 2 + (max_y - min_y) ** 2) / 2)))
+    return {
+        "lat": round(lat, 7),
+        "lng": round(lng, 7),
+        "radius_m": radius,
+        "source_id": item["index"],
+    }
+
+
+def in_bbox(lat: float, lng: float, south: float, west: float, north: float, east: float) -> bool:
+    return south <= lat <= north and west <= lng <= east
 
 
 def features(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -103,4 +198,3 @@ def distance_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 def source_id(feature: dict[str, Any]) -> str | int | None:
     properties = feature.get("properties") or {}
     return feature.get("id") or properties.get("id") or properties.get("fid") or properties.get("objectid")
-
