@@ -246,6 +246,35 @@ legend {
   margin: -2px 0 0;
 }
 
+.addressOptions {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  overflow: hidden;
+}
+
+.addressOptions button {
+  background: #fffdf7;
+  border: 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.addressOptions button:first-child {
+  border-top: 0;
+}
+
+.addressOptions button:hover,
+.addressOptions button:focus {
+  background: #edf5ec;
+}
+
 .primary:disabled,
 .secondary:disabled {
   cursor: progress;

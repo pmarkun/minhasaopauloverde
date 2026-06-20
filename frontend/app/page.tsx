@@ -30,6 +30,12 @@ type GeocodeResponse = {
   lat: number;
   lng: number;
   label: string;
+  source?: string;
+};
+
+type GeocodeOptionsResponse = {
+  query: string;
+  options: GeocodeResponse[];
 };
 
 const API_BASE =
@@ -64,6 +70,7 @@ export default function Home() {
   const [treesVisible, setTreesVisible] = useState<TreeVisibility | null>(null);
   const [score, setScore] = useState<ScoreResponse | null>(null);
   const [mapData, setMapData] = useState<MapDataResponse | null>(null);
+  const [geocodeOptions, setGeocodeOptions] = useState<GeocodeResponse[]>([]);
   const [error, setError] = useState("");
   const [locationHint, setLocationHint] = useState("Pedimos sua localizacao para comecar pelo seu entorno.");
   const [loading, setLoading] = useState(false);
@@ -153,17 +160,31 @@ export default function Home() {
 
   async function geocodeAddress() {
     setError("");
+    setGeocodeOptions([]);
     try {
       const params = new URLSearchParams({ q: address });
-      const response = await fetch(`${API_BASE}/geocode?${params}`);
+      const response = await fetch(`${API_BASE}/geocode-options?${params}`);
       if (!response.ok) throw new Error("Endereco nao encontrado.");
-      const result: GeocodeResponse = await response.json();
-      setLat(result.lat.toFixed(6));
-      setLng(result.lng.toFixed(6));
-      setAddress(result.label);
+      const result: GeocodeOptionsResponse = await response.json();
+      if (result.options.length === 1) {
+        selectGeocodeOption(result.options[0]);
+        return;
+      }
+      setGeocodeOptions(result.options);
+      setLocationHint("Escolha o endereco correto na lista.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro inesperado.");
     }
+  }
+
+  function selectGeocodeOption(option: GeocodeResponse) {
+    setLat(option.lat.toFixed(6));
+    setLng(option.lng.toFixed(6));
+    setAddress(option.label);
+    setGeocodeOptions([]);
+    setScore(null);
+    setMapData(null);
+    setLocationHint("Endereco escolhido. Agora pode calcular seu entorno.");
   }
 
   async function sharePng() {
@@ -263,6 +284,19 @@ export default function Home() {
             <input value={address} onChange={(event) => setAddress(event.target.value)} />
           </label>
           <p className="locationHint">{locationHint}</p>
+          {geocodeOptions.length > 0 && (
+            <div className="addressOptions" aria-label="Opcoes de endereco">
+              {geocodeOptions.map((option) => (
+                <button
+                  key={`${option.lat}-${option.lng}-${option.label}`}
+                  onClick={() => selectGeocodeOption(option)}
+                  type="button"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="buttonRow">
             <button className="secondary" onClick={geocodeAddress} type="button">
               Encontrar

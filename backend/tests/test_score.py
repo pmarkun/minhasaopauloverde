@@ -13,7 +13,7 @@ def test_health() -> None:
 
 
 def test_geocode_known_address(monkeypatch) -> None:
-    monkeypatch.setattr("treecheck_api.main.geocode_nominatim", lambda q: None)
+    monkeypatch.setattr("treecheck_api.main.geocode_nominatim_options", lambda q, limit=5: [])
     response = client.get("/geocode?q=Avenida%20Paulista")
     assert response.status_code == 200
     body = response.json()
@@ -22,9 +22,18 @@ def test_geocode_known_address(monkeypatch) -> None:
 
 
 def test_geocode_unknown_address_returns_404(monkeypatch) -> None:
-    monkeypatch.setattr("treecheck_api.main.geocode_nominatim", lambda q: None)
+    monkeypatch.setattr("treecheck_api.main.geocode_nominatim_options", lambda q, limit=5: [])
     response = client.get("/geocode?q=Endereco%20Inexistente%20XYZ")
     assert response.status_code == 404
+
+
+def test_geocode_options_returns_candidates(monkeypatch) -> None:
+    monkeypatch.setattr("treecheck_api.main.geocode_nominatim_options", lambda q, limit=5: [])
+    response = client.get("/geocode-options?q=Avenida%20Paulista")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["query"] == "Avenida Paulista"
+    assert body["options"][0]["label"] == "Avenida Paulista, Sao Paulo"
 
 
 def test_indicators_contract() -> None:

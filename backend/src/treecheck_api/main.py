@@ -96,6 +96,11 @@ class GeocodeResponse(BaseModel):
     source: str = "sample_local"
 
 
+class GeocodeOptionsResponse(BaseModel):
+    query: str
+    options: list[GeocodeResponse]
+
+
 class TerritoryIndicator(BaseModel):
     id: str
     name: str
@@ -146,24 +151,48 @@ def indicators() -> list[TerritoryIndicator]:
 
 @app.get("/geocode", response_model=GeocodeResponse)
 def geocode(q: Annotated[str, Query(min_length=3)]) -> GeocodeResponse:
-    nominatim = geocode_nominatim(q)
-    if nominatim:
-        return nominatim
-
-    normalized = q.strip().lower()
-    for key, (lat, lng, label) in sample_addresses().items():
-        if key in normalized:
-            return GeocodeResponse(query=q, lat=lat, lng=lng, label=label)
-
+    options = geocode_options_for_query(q)
+    if options:
+        return options[0]
     raise HTTPException(status_code=404, detail="Endereco nao encontrado")
 
 
+@app.get("/geocode-options", response_model=GeocodeOptionsResponse)
+def geocode_options(q: Annotated[str, Query(min_length=3)]) -> GeocodeOptionsResponse:
+    options = geocode_options_for_query(q)
+    if not options:
+        raise HTTPException(status_code=404, detail="Endereco nao encontrado")
+    return GeocodeOptionsResponse(query=q, options=options)
+
+
+def geocode_options_for_query(q: str) -> list[GeocodeResponse]:
+    options = geocode_nominatim_options(q)
+    normalized = q.strip().lower()
+    for key, (lat, lng, label) in sample_addresses().items():
+        if key in normalized:
+            options.append(GeocodeResponse(query=q, lat=lat, lng=lng, label=label))
+    seen = set()
+    unique = []
+    for option in options:
+        marker = (round(option.lat, 5), round(option.lng, 5), option.label)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        unique.append(option)
+    return unique[:5]
+
+
 def geocode_nominatim(q: str) -> GeocodeResponse | None:
+    options = geocode_nominatim_options(q, limit=1)
+    return options[0] if options else None
+
+
+def geocode_nominatim_options(q: str, limit: int = 5) -> list[GeocodeResponse]:
     params = urllib.parse.urlencode(
         {
             "q": f"{q}, Sao Paulo, SP, Brasil",
             "format": "jsonv2",
-            "limit": 1,
+            "limit": limit,
             "addressdetails": 0,
             "countrycodes": "br",
             "viewbox": "-46.83,-23.35,-46.36,-24.05",
@@ -178,17 +207,19 @@ def geocode_nominatim(q: str) -> GeocodeResponse | None:
         with urllib.request.urlopen(request, timeout=6) as response:
             payload = json.load(response)
     except Exception:
-        return None
+        return []
     if not payload:
-        return None
-    result = payload[0]
-    return GeocodeResponse(
-        query=q,
-        lat=round(float(result["lat"]), 6),
-        lng=round(float(result["lon"]), 6),
-        label=result.get("display_name", q),
-        source="nominatim_openstreetmap",
-    )
+        return []
+    return [
+        GeocodeResponse(
+            query=q,
+            lat=round(float(result["lat"]), 6),
+            lng=round(float(result["lon"]), 6),
+            label=result.get("display_name", q),
+            source="nominatim_openstreetmap",
+        )
+        for result in payload
+    ]
 
 
 @app.get("/score", response_model=ScoreResponse)
